@@ -1,0 +1,38 @@
+# Forge Swarm Configuration
+# Version: 1.0
+
+# LLM Configuration
+llm:
+  model: "llama3.1:8b"           # Change to your preferred model
+  base_url: "http://localhost:11434"
+  temperature: 0.7                # 0.0 = deterministic, 1.0 = creative
+  num_ctx: 8192                   # Context window size
+  timeout: 120                    # Request timeout in seconds
+
+# Embeddings Configuration
+embeddings:
+  model: "nomic-embed-text"       # Model for vector embeddings
+  base_url: "http://localhost:11434"
+
+# Memory/Database Configuration
+memory:
+  db_path: "./forge_swarm_memory" # Path to ChromaDB storage
+  collection_name: "improvement_lessons"
+  max_lessons: 100                # Maximum lessons to keep
+  retention_days: 180             # How long to keep lessons
+
+# Agent Configuration
+agents:
+  max_iterations: 3               # Max retry attempts per task
+  verbose: true                   # Enable detailed agent output
+  allow_delegation: false         # Allow agents to delegate to each other
+
+# UI Configuration
+ui:
+  page_title: "Forge Swarm"
+  page_icon: "🤖"
+  layout: "wide"                  # "wide" or "centered"
+
+# Optional: Web Search (requires SERPER_API_KEY environment variable)
+# serper:
+#   api_key: "your-serper-api-key-here"
