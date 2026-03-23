@@ -33,13 +33,177 @@ os.environ["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY", "sk-dummy-ollama-only
 import streamlit as st
 import yaml
 from crewai import Agent, Task, Crew, Process
-from langchain_ollama import ChatOllama, OllamaEmbeddings
 from crewai_tools import SerperDevTool
 import chromadb
 from chromadb.config import Settings
 from dotenv import load_dotenv
+import ollama
 
 load_dotenv()
+
+
+class ChatOllama:
+    """Wrapper for ollama client compatible with CrewAI."""
+
+    def __init__(self, model: str, base_url: str = "http://localhost:11434", temperature: float = 0.7, num_ctx: int = 8192):
+        self.model = model
+        self.base_url = base_url
+        self.temperature = temperature
+        self.num_ctx = num_ctx
+        self.client = ollama.Client(host=base_url)
+
+    def invoke(self, prompt: str) -> str:
+        """Generate a response using the Ollama API."""
+        response = self.client.generate(
+            model=self.model,
+            prompt=prompt,
+            options={
+                "temperature": self.temperature,
+                "num_ctx": self.num_ctx,
+            }
+        )
+        return response["response"]
+
+    def __call__(self, prompt: str) -> str:
+        """Allow the instance to be called as a function."""
+        return self.invoke(prompt)
+
+
+class OllamaEmbeddings:
+    """Wrapper for ollama embeddings compatible with ChromaDB."""
+
+    def __init__(self, model: str = "nomic-embed-text", base_url: str = "http://localhost:11434"):
+        self.model = model
+        self.base_url = base_url
+        self.client = ollama.Client(host=base_url)
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        """Generate embeddings for multiple texts."""
+        return [self.embed_query(text) for text in texts]
+
+    def embed_query(self, text: str) -> list[float]:
+        """Generate embedding for a single query text."""
+        response = self.client.embeddings(model=self.model, prompt=text)
+        return response["embedding"]
+
+
+# ============================================================================
+# DARK THEME CSS
+# ============================================================================
+
+DARK_THEME_CSS = """
+<style>
+    .stApp { background-color: #0d0d0d; color: #e0e0e0; }
+    [data-testid="stSidebar"] {
+        background-color: #111111;
+        border-right: 1px solid #222222;
+    }
+    [data-testid="stExpander"] {
+        background-color: #161616;
+        border: 1px solid #2a2a2a;
+        border-radius: 8px;
+    }
+    .stTextArea textarea, .stTextInput input {
+        background-color: #1a1a1a !important;
+        color: #e0e0e0 !important;
+        border: 1px solid #333333 !important;
+        border-radius: 6px !important;
+        font-family: 'JetBrains Mono', 'Fira Code', monospace !important;
+    }
+    .stButton > button[kind="primary"] {
+        background: linear-gradient(135deg, #ff4b4b, #ff6b35) !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 6px !important;
+        font-weight: 600 !important;
+        letter-spacing: 0.5px !important;
+        transition: all 0.2s ease !important;
+    }
+    .stButton > button[kind="primary"]:hover {
+        transform: translateY(-1px) !important;
+        box-shadow: 0 4px 20px rgba(255, 75, 75, 0.4) !important;
+    }
+    .stTabs [data-baseweb="tab-list"] {
+        background-color: #111111;
+        border-bottom: 1px solid #222222;
+    }
+    .stTabs [data-baseweb="tab"] { color: #888888; font-weight: 500; }
+    .stTabs [aria-selected="true"] {
+        color: #ff4b4b !important;
+        border-bottom: 2px solid #ff4b4b !important;
+    }
+    .stCodeBlock {
+        background-color: #0a0a0a !important;
+        border: 1px solid #1e1e1e !important;
+        border-radius: 8px !important;
+    }
+    .agent-card {
+        background: #161616;
+        border: 1px solid #2a2a2a;
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin: 4px 0;
+        font-family: monospace;
+        font-size: 0.85rem;
+    }
+    .agent-card.active { border-color: #ff4b4b; box-shadow: 0 0 12px rgba(255,75,75,0.2); }
+    .agent-card.done { border-color: #4caf50; opacity: 0.7; }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #111111; }
+    ::-webkit-scrollbar-thumb { background: #333333; border-radius: 3px; }
+</style>
+"""
+
+
+# ============================================================================
+# AGENT STATUS DISPLAY
+# ============================================================================
+
+class AgentStatusDisplay:
+    """Renders real-time agent pipeline status in Streamlit."""
+
+    AGENTS = [
+        ("🗺️", "Planner", "Breaking down your request..."),
+        ("🔍", "Researcher", "Gathering patterns and context..."),
+        ("⚙️", "Coder", "Writing implementation..."),
+        ("🧪", "Tester", "Writing test suite..."),
+        ("🎯", "Critic", "Scoring output quality..."),
+    ]
+
+    @staticmethod
+    def render_pipeline(current_agent_idx: int = -1) -> None:
+        """Render all 5 agents as status cards."""
+        st.markdown("### 🤖 Agent Pipeline")
+        cols = st.columns(5)
+        for i, (icon, name, desc) in enumerate(AgentStatusDisplay.AGENTS):
+            with cols[i]:
+                if current_agent_idx == -1:
+                    status, card_class = "⚪", ""
+                elif i < current_agent_idx:
+                    status, card_class = "✅", "done"
+                elif i == current_agent_idx:
+                    status, card_class = "🔄", "active"
+                else:
+                    status, card_class = "⏳", ""
+                st.markdown(
+                    f'<div class="agent-card {card_class}">'
+                    f'{status} <strong>{icon} {name}</strong><br/>'
+                    f'<small style="color:#666">{desc}</small></div>',
+                    unsafe_allow_html=True,
+                )
+
+    @staticmethod
+    def render_score(score: int, verdict: str) -> None:
+        """Render critic score badge."""
+        color = "#4caf50" if score >= 8 else "#ff9800" if score >= 6 else "#ff4b4b"
+        st.markdown(
+            f'<div style="margin:8px 0">'
+            f'<span style="background:{color};color:white;border-radius:20px;'
+            f'padding:4px 14px;font-weight:700;font-size:1rem">'
+            f'Score: {score}/10</span>&nbsp;&nbsp;'
+            f'<span style="color:{color};font-weight:600">{verdict}</span></div>',
+            unsafe_allow_html=True,
+        )
 
 
 # ============================================================================
@@ -165,8 +329,11 @@ class SystemChecker:
             return False, f"Error checking Ollama: {str(e)}"
     
     @staticmethod
-    def check_model(model_name: str) -> tuple[bool, str]:
-        """Check if a model is available"""
+    def check_model(model_name: str, fallback_models: List[str] = None) -> tuple[bool, str]:
+        """Check if a model is available, try fallbacks if not found"""
+        if fallback_models is None:
+            fallback_models = ["llama3", "llama3.2", "mistral", "phi3", "gemma2", "qwen2.5"]
+        
         try:
             result = subprocess.run(
                 ['ollama', 'list'],
@@ -174,9 +341,18 @@ class SystemChecker:
                 text=True,
                 timeout=10
             )
-            if model_name in result.stdout:
+            available = result.stdout
+            
+            # Check requested model
+            if model_name in available:
                 return True, f"Model {model_name} is available"
-            return False, f"Model {model_name} not found. Pull it with: ollama pull {model_name}"
+            
+            # Check fallback models
+            for fallback in fallback_models:
+                if fallback in available:
+                    return True, f"Model {fallback} is available"
+            
+            return False, f"No model found. Pull one with: ollama pull llama3.1:8b"
         except Exception as e:
             return False, f"Could not check model: {str(e)}"
     
@@ -230,6 +406,33 @@ class SystemChecker:
             "embeddings": (emb_ok, emb_msg),
             "chromadb": (chromadb_ok, chromadb_msg),
         }
+    
+    @staticmethod
+    def get_best_available_model() -> str:
+        """Return the best available model from common options."""
+        preferred = ["llama3.1:8b", "llama3.1", "llama3.2", "llama3", "mistral", "phi3", "gemma2", "qwen2.5"]
+        
+        try:
+            result = subprocess.run(
+                ['ollama', 'list'],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            available = result.stdout
+            
+            for model in preferred:
+                if model in available:
+                    return model
+            
+            # Return first available model if none of the preferred exist
+            lines = result.stdout.strip().split('\n')[1:]  # Skip header
+            if lines:
+                return lines[0].split()[0]
+            
+            return "llama3.1:8b"  # Default
+        except Exception:
+            return "llama3.1:8b"
 
 
 # ============================================================================
@@ -388,17 +591,52 @@ class MemoryManager:
         except Exception as e:
             st.warning(f"Could not prune old lessons: {e}")
     
-    def export_memory(self) -> Dict[str, Any]:
-        """Export all lessons for backup"""
+    def export_memory(self) -> str:
+        """Export all stored lessons as JSON string for download."""
         try:
-            return {
-                "version": "1.0",
-                "export_date": datetime.now().isoformat(),
-                "collection": self.collection.get()
+            results = self.collection.get(include=["documents", "metadatas"])
+            export = {
+                "exported_at": datetime.now().isoformat(),
+                "collection": self.collection.name,
+                "count": len(results["documents"]),
+                "lessons": [
+                    {"document": doc, "metadata": meta}
+                    for doc, meta in zip(results["documents"], results["metadatas"])
+                ],
             }
+            return json.dumps(export, indent=2)
         except Exception as e:
-            st.error(f"Could not export memory: {e}")
-            return {}
+            print(f"❌ Export failed: {e}")
+            return json.dumps({"error": str(e)})
+
+    def search_memory(self, query: str, n_results: int = 10) -> List[Dict]:
+        """Search memory with text query, return ranked results."""
+        try:
+            count = self.collection.count()
+            if count == 0:
+                return []
+            results = self.collection.query(
+                query_texts=[query],
+                n_results=min(n_results, count),
+                include=["documents", "metadatas", "distances"],
+            )
+            return [
+                {
+                    "task": meta.get("task_description", "Unknown"),
+                    "result": doc,
+                    "score": meta.get("quality_score", 0),
+                    "distance": round(dist, 4),
+                    "stored_at": meta.get("stored_at", "Unknown"),
+                }
+                for doc, meta, dist in zip(
+                    results["documents"][0],
+                    results["metadatas"][0],
+                    results["distances"][0],
+                )
+            ]
+        except Exception as e:
+            print(f"❌ Memory search failed: {e}")
+            return []
     
     def get_stats(self) -> Dict[str, Any]:
         """Get memory statistics"""
@@ -424,15 +662,34 @@ class MemoryManager:
         self,
         task_id: str,
         task_description: str,
-        result: str
+        result: str,
+        quality_score: int = 0,
+        iterations: int = 1,
     ) -> None:
-        """Store a completed task result (alias for save_lesson without score)."""
-        self.save_lesson(
-            task_desc=task_description,
-            output=result,
-            critic_feedback="",
-            score=0.0
-        )
+        """Store a completed task result — only if score meets threshold."""
+        min_score = self.config.get("min_score_to_store", 7)
+        if quality_score < min_score:
+            print(f"⚠️ Score {quality_score} below threshold {min_score}. Skipping storage.")
+            return
+        try:
+            text = f"Task: {task_description}\nResult: {result}"
+            embedding = self.embedder.embed_documents([text])[0]
+            
+            self.collection.add(
+                documents=[result],
+                metadatas=[{
+                    "task_id": task_id,
+                    "task_description": task_description[:500],
+                    "quality_score": quality_score,
+                    "iterations": iterations,
+                    "stored_at": datetime.now().isoformat(),
+                }],
+                ids=[task_id],
+                embeddings=[embedding]
+            )
+            print(f"💾 Stored lesson (score: {quality_score}/10)")
+        except Exception as e:
+            print(f"❌ Failed to store result: {e}")
     
     def query_similar(
         self,
@@ -464,15 +721,16 @@ class AgentFactory:
         self.config = config['agents']
     
     def create_planner(self) -> Agent:
-        """Create planner agent"""
+        """Create planner agent - Strategic Engineering Lead"""
         return Agent(
-            role="Strategic Planner",
-            goal="Create clear, step-by-step plans for complex tasks",
+            role="Strategic Engineering Lead",
+            goal="Decompose any coding request into a precise, dependency-ordered execution plan with clear acceptance criteria per subtask.",
             backstory=(
-                "You are an experienced project manager and architect. "
-                "You excel at breaking down big problems into actionable steps, "
-                "identifying dependencies, and creating realistic timelines. "
-                "You always consider past lessons and learnings."
+                "15 years shipping production systems across fintech, healthcare, and SaaS. "
+                "Has a pathological hatred of ambiguity. Every plan you write must answer: "
+                "What are we building? What does done look like? What can go wrong? "
+                "You think in trees — break the root problem into branches, branches into leaves. "
+                "Output format: numbered tasks, each with input, output, and acceptance criteria."
             ),
             llm=self.llm,
             verbose=self.config['verbose'],
@@ -480,7 +738,7 @@ class AgentFactory:
         )
     
     def create_researcher(self, enable_web_search: bool = False) -> Agent:
-        """Create researcher agent"""
+        """Create researcher agent - Principal Technical Researcher"""
         tools = []
         if enable_web_search:
             try:
@@ -489,12 +747,13 @@ class AgentFactory:
                 st.warning("Web search tool not configured (SERPER_API_KEY missing)")
         
         return Agent(
-            role="Senior Researcher",
-            goal="Gather accurate, up-to-date information and documentation",
+            role="Principal Technical Researcher",
+            goal="Produce a concise, high-signal research brief covering the best implementation patterns, known pitfalls, and idiomatic approaches for the task.",
             backstory=(
-                "You are a meticulous researcher who finds reliable facts, "
-                "references, and best practices. You verify information from "
-                "multiple sources and provide comprehensive research reports."
+                "Obsessive reader of RFCs, PEPs, source code, and engineering blogs. "
+                "Knows when to use a library vs roll your own. Hates cargo-culting. "
+                "Every research brief must include: recommended approach, alternatives considered, "
+                "top 3 gotchas, and one non-obvious insight the coder would miss."
             ),
             tools=tools,
             llm=self.llm,
@@ -503,16 +762,15 @@ class AgentFactory:
         )
     
     def create_coder(self) -> Agent:
-        """Create coder agent"""
+        """Create coder agent - Senior Software Craftsperson"""
         return Agent(
-            role="Senior Full-Stack Developer",
-            goal="Write clean, well-structured, functional, and tested code",
+            role="Senior Software Craftsperson",
+            goal="Write complete, production-grade, immediately runnable code based on the plan and research brief. No placeholders. No TODOs without tracking. No magic numbers.",
             backstory=(
-                "You are an expert developer with 10+ years of experience. "
-                "You write production-ready code following best practices, "
-                "include proper error handling, add comments, and always "
-                "consider security and performance. You write self-documenting "
-                "code with clear variable names and structure."
+                "Treats code like prose. Every function has one job. Every variable name "
+                "tells a story. Uses type hints everywhere. Writes comments that explain "
+                "WHY, not WHAT. Has strong opinions: explicit > implicit, simple > clever, "
+                "boring > exciting. Will refuse to ship code that 'works but is embarrassing.'"
             ),
             llm=self.llm,
             verbose=self.config['verbose'],
@@ -520,15 +778,17 @@ class AgentFactory:
         )
     
     def create_tester(self) -> Agent:
-        """Create tester agent"""
+        """Create tester agent - Adversarial QA Engineer"""
         return Agent(
-            role="QA Engineer & Test Specialist",
-            goal="Create comprehensive tests and identify edge cases",
+            role="Adversarial QA Engineer",
+            goal="Write a complete test suite that tries to break the code before production does.",
             backstory=(
-                "You are a quality assurance expert who thinks about what "
-                "could go wrong. You write unit tests, integration tests, "
-                "and suggest test scenarios. You're familiar with testing "
-                "frameworks and best practices."
+                "Broke prod 3 times early in career. Now sees failure modes everywhere. "
+                "Writes tests in three categories: "
+                "1. Happy path — does it work when everything is correct? "
+                "2. Sad path — does it fail gracefully when inputs are wrong? "
+                "3. Evil path — what happens with None, empty strings, huge numbers, unicode? "
+                "Uses pytest. Aims for 80%+ coverage. Names tests like documentation."
             ),
             llm=self.llm,
             verbose=self.config['verbose'],
@@ -536,23 +796,85 @@ class AgentFactory:
         )
     
     def create_critic(self) -> Agent:
-        """Create critic agent"""
+        """Create critic agent - Principal Engineer & Gatekeeper"""
         return Agent(
-            role="Critical Reviewer & QA Lead",
-            goal="Critically review outputs, score quality, and suggest improvements",
+            role="Principal Engineer & Gatekeeper",
+            goal="Score the complete output (code + tests) on a scale of 1-10 with surgical specificity. Approve if score >= 8. Request targeted revisions if below.",
             backstory=(
-                "You are a ruthless but fair code reviewer and QA lead. "
-                "You score outputs on a scale of 1-10 based on: "
-                "accuracy (3 pts), completeness (2 pts), code quality (2 pts), "
-                "security (2 pts), and best practices (1 pt). "
-                "You provide specific, actionable feedback. "
-                "If code or APIs are involved, you suggest Keploy test commands. "
-                "You're known for catching issues others miss."
+                "Zero tolerance for mediocrity. Has reviewed 10,000+ PRs. Scores on: "
+                "- Correctness (does it actually work?) "
+                "- Readability (can a junior follow it?) "
+                "- Robustness (does it handle edge cases?) "
+                "- Idiomatic style (is it Pythonic?) "
+                "- Test coverage (are the tests meaningful?) "
+                "Output format MUST be: "
+                "SCORE: X/10 "
+                "VERDICT: APPROVED / REVISION REQUIRED "
+                "ISSUES: [bulleted list of specific line-level issues] "
+                "REQUIRED CHANGES: [only if REVISION REQUIRED]"
             ),
             llm=self.llm,
             verbose=self.config['verbose'],
             allow_delegation=self.config['allow_delegation']
         )
+    
+    def create_all(self) -> Dict[str, Agent]:
+        """Create all agents, return as named dict."""
+        return {
+            "planner": self.create_planner(),
+            "researcher": self.create_researcher(),
+            "coder": self.create_coder(),
+            "tester": self.create_tester(),
+            "critic": self.create_critic(),
+        }
+
+
+# ============================================================================
+# CRITIC PARSER
+# ============================================================================
+
+class CriticParser:
+    """Parses structured Critic agent output into typed fields."""
+
+    @staticmethod
+    def parse(critic_output: str) -> Dict[str, Any]:
+        """
+        Extract score, verdict, issues, and required changes from critic output.
+
+        Returns:
+            Dict with keys: score (int), verdict (str), issues (List[str]),
+            required_changes (List[str]), approved (bool)
+        """
+        result = {
+            "score": 0,
+            "verdict": "UNKNOWN",
+            "issues": [],
+            "required_changes": [],
+            "approved": False,
+        }
+
+        lines = critic_output.strip().split("\n")
+        current_section = None
+
+        for line in lines:
+            line = line.strip()
+            if line.startswith("SCORE:"):
+                try:
+                    score_str = line.replace("SCORE:", "").strip()
+                    result["score"] = int(score_str.split("/")[0])
+                except (ValueError, IndexError):
+                    result["score"] = 0
+            elif line.startswith("VERDICT:"):
+                result["verdict"] = line.replace("VERDICT:", "").strip()
+                result["approved"] = "APPROVED" in result["verdict"].upper()
+            elif line.startswith("ISSUES:"):
+                current_section = "issues"
+            elif line.startswith("REQUIRED CHANGES:"):
+                current_section = "required_changes"
+            elif line.startswith("- ") and current_section:
+                result[current_section].append(line[2:])
+
+        return result
 
 
 # ============================================================================
@@ -836,6 +1158,137 @@ class SwarmOrchestrator:
 
 
 # ============================================================================
+# TASK ORCHESTRATOR
+# ============================================================================
+
+class TaskOrchestrator:
+    """Orchestrates task creation and crew execution with retry loop."""
+
+    def __init__(self, agents: Dict[str, Agent], config: Dict[str, Any]):
+        self.agents = agents
+        self.config = config
+
+    def build_tasks(self, user_request: str, context: str = "") -> List[Task]:
+        """Create ordered task list from user request."""
+        tasks = []
+        
+        # Planning task
+        plan_task = Task(
+            description=(
+                f"Create a detailed step-by-step plan for:\n\n{user_request}\n\n"
+                f"Context:\n{context}\n\n"
+                f"Output format: numbered tasks, each with input, output, and acceptance criteria."
+            ),
+            expected_output="Numbered plan with acceptance criteria",
+            agent=self.agents["planner"]
+        )
+        tasks.append(plan_task)
+
+        # Research task
+        research_task = Task(
+            description=(
+                f"Based on the plan, research implementation patterns.\n"
+                f"Include: recommended approach, alternatives, top 3 gotchas, one non-obvious insight."
+            ),
+            expected_output="Research brief with patterns and pitfalls",
+            agent=self.agents["researcher"]
+        )
+        tasks.append(research_task)
+
+        # Coding task
+        code_task = Task(
+            description=(
+                f"Write complete, production-grade code.\n"
+                f"No placeholders. No TODOs. No magic numbers. Use type hints."
+            ),
+            expected_output="Complete runnable code",
+            agent=self.agents["coder"]
+        )
+        tasks.append(code_task)
+
+        # Testing task
+        test_task = Task(
+            description=(
+                f"Write pytest test suite covering: happy path, sad path, evil path.\n"
+                f"Include edge cases: None, empty strings, huge numbers, unicode."
+            ),
+            expected_output="Complete test suite",
+            agent=self.agents["tester"]
+        )
+        tasks.append(test_task)
+
+        # Critic task
+        critic_task = Task(
+            description=(
+                f"Review all output and score quality 1-10.\n"
+                f"Output format MUST be:\n"
+                f"SCORE: X/10\n"
+                f"VERDICT: APPROVED / REVISION REQUIRED\n"
+                f"ISSUES: [bulleted list]\n"
+                f"REQUIRED CHANGES: [if REVISION REQUIRED]"
+            ),
+            expected_output="SCORE, VERDICT, ISSUES, REQUIRED CHANGES",
+            agent=self.agents["critic"]
+        )
+        tasks.append(critic_task)
+
+        return tasks
+
+    def run(self, user_request: str, context: str = "") -> Dict[str, Any]:
+        """
+        Execute the crew with retry loop based on Critic score.
+
+        Returns:
+            Dict with keys: final_code (str), critic_result (dict),
+            iterations (int), agent_log (str)
+        """
+        quality_threshold = self.config["agents"]["quality_threshold"]
+        max_iterations = self.config["agents"]["max_iterations"]
+        retry = self.config["agents"]["retry_on_below_threshold"]
+
+        iteration = 0
+        last_result = None
+        agent_log = []
+
+        while iteration < max_iterations:
+            iteration += 1
+            agent_log.append(f"🔄 Iteration {iteration}/{max_iterations}")
+
+            tasks = self.build_tasks(user_request, context)
+            crew = Crew(
+                agents=list(self.agents.values()),
+                tasks=tasks,
+                process=Process.sequential,
+                verbose=True,
+            )
+
+            result = crew.kickoff()
+            critic_data = CriticParser.parse(str(result))
+            agent_log.append(f"📊 Critic score: {critic_data['score']}/10")
+
+            last_result = {
+                "final_code": str(result),
+                "critic_result": critic_data,
+                "iterations": iteration,
+                "agent_log": "\n".join(agent_log),
+            }
+
+            if critic_data["approved"] or critic_data["score"] >= quality_threshold:
+                agent_log.append(f"✅ Approved at iteration {iteration}")
+                break
+
+            if not retry:
+                break
+
+            context += f"\n\nPrevious attempt issues:\n" + "\n".join(
+                critic_data["required_changes"]
+            )
+            agent_log.append("⚠️ Below threshold. Retrying with critic feedback.")
+
+        return last_result
+
+
+# ============================================================================
 # SETUP WIZARD
 # ============================================================================
 
@@ -919,257 +1372,321 @@ def setup_wizard():
 
 
 # ============================================================================
+# CODE SANDBOX
+# ============================================================================
+
+class CodeSandbox:
+    """Safe, restricted Python code execution using RestrictedPython."""
+
+    def __init__(self, config: Dict[str, Any]):
+        self.timeout = config.get("sandbox", {}).get("timeout_seconds", 10)
+        self.max_lines = config.get("sandbox", {}).get("max_output_lines", 100)
+        self.enabled = config.get("sandbox", {}).get("enabled", True)
+
+    def execute(self, code: str) -> Dict[str, Any]:
+        """Execute a Python code snippet safely."""
+        if not self.enabled:
+            return {"output": "", "error": "Sandbox disabled in config", "success": False, "truncated": False}
+
+        import io
+        import contextlib
+        from RestrictedPython import compile_restricted, safe_globals
+
+        result = {"output": "", "error": None, "success": False, "truncated": False}
+        try:
+            byte_code = compile_restricted(code, "<sandbox>", "exec")
+            output_buffer = io.StringIO()
+            restricted_globals = {**safe_globals, "_print_": print}
+            with contextlib.redirect_stdout(output_buffer):
+                exec(byte_code, restricted_globals)  # noqa: S102
+            lines = output_buffer.getvalue().split("\n")
+            if len(lines) > self.max_lines:
+                lines = lines[:self.max_lines]
+                result["truncated"] = True
+            result["output"] = "\n".join(lines)
+            result["success"] = True
+        except SyntaxError as e:
+            result["error"] = f"Syntax error: {e}"
+        except Exception as e:
+            result["error"] = f"Runtime error: {type(e).__name__}: {e}"
+        return result
+
+    def render_ui(self, code: str) -> None:
+        """Render sandbox execution UI in Streamlit."""
+        st.markdown("### 🧪 Code Sandbox")
+        st.caption("⚠️ Restricted execution — safe imports only. No filesystem or network access.")
+        editable = st.text_area("Edit before running", value=code, height=300, key="sandbox_code")
+        if st.button("▶️ Run Code", type="primary"):
+            with st.spinner("Executing..."):
+                result = self.execute(editable)
+            if result["success"]:
+                st.success("✅ Execution successful")
+                if result["output"]:
+                    st.code(result["output"], language="text")
+                    if result["truncated"]:
+                        st.warning(f"Output truncated to {self.max_lines} lines")
+                else:
+                    st.info("No output produced")
+            else:
+                st.error(f"❌ {result['error']}")
+
+
+# ============================================================================
+# FILE UPLOAD HANDLER
+# ============================================================================
+
+class FileUploadHandler:
+    """Handles file uploads for context injection into agent runs."""
+
+    SUPPORTED_TYPES = ["py", "txt", "md", "json", "yaml", "toml", "js", "ts"]
+    MAX_FILE_SIZE_KB = 500
+
+    @staticmethod
+    def render_upload_ui() -> Optional[str]:
+        """Render file upload widget, return file contents or None."""
+        uploaded = st.file_uploader(
+            "Upload a file for context",
+            type=FileUploadHandler.SUPPORTED_TYPES,
+            help=f"Max {FileUploadHandler.MAX_FILE_SIZE_KB}KB",
+        )
+        if uploaded is None:
+            return None
+        size_kb = uploaded.size / 1024
+        if size_kb > FileUploadHandler.MAX_FILE_SIZE_KB:
+            st.error(f"❌ File too large ({size_kb:.0f}KB). Max {FileUploadHandler.MAX_FILE_SIZE_KB}KB.")
+            return None
+        try:
+            contents = uploaded.read().decode("utf-8")
+            st.success(f"✅ Loaded `{uploaded.name}` ({size_kb:.1f}KB)")
+            with st.expander("Preview"):
+                st.code(contents[:800] + ("..." if len(contents) > 800 else ""))
+            return f"# File: {uploaded.name}\n\n{contents}"
+        except UnicodeDecodeError:
+            st.error("❌ Could not decode file. Upload a text file.")
+            return None
+
+
+# ============================================================================
 # MAIN UI
 # ============================================================================
 
-def main():
+def main() -> None:
     """Main application"""
-    
-    # Load config
-    config = Config.load()
-    
-    # Page config
     st.set_page_config(
-        page_title=config['ui']['page_title'],
-        page_icon=config['ui']['page_icon'],
-        layout=config['ui']['layout']
+        page_title="⚡ Forge Swarm",
+        page_icon="⚡",
+        layout="wide",
+        initial_sidebar_state="expanded",
     )
-    
-    # Check if setup is needed
-    if 'setup_complete' not in st.session_state:
-        ollama_ok, _ = SystemChecker.check_ollama()
-        llm_ok, _ = SystemChecker.check_model(config['llm']['model'])
-        
-        if not (ollama_ok and llm_ok):
-            setup_wizard()
-            return
-        else:
-            st.session_state.setup_complete = True
-    
-    # Initialize managers (cached)
-    if 'llm_manager' not in st.session_state:
-        st.session_state.llm_manager = LLMManager(config)
-    
-    if 'memory_manager' not in st.session_state:
-        st.session_state.memory_manager = MemoryManager(
-            config,
-            st.session_state.llm_manager.embedder
-        )
-    
-    if 'orchestrator' not in st.session_state:
-        st.session_state.orchestrator = SwarmOrchestrator(
-            st.session_state.llm_manager,
-            st.session_state.memory_manager,
-            config
-        )
-    
-    # Header
-    st.title("🤖 Forge Swarm")
-    st.caption("100% Local • Privacy-First • Self-Improving Multi-Agent AI")
-    
-    # Sidebar
+    st.markdown(DARK_THEME_CSS, unsafe_allow_html=True)
+
+    config = Config.load()
+
+    # Session state initialization
+    if "run_history" not in st.session_state:
+        st.session_state.run_history = []
+    if "last_result" not in st.session_state:
+        st.session_state.last_result = None
+    if "confirm_clear" not in st.session_state:
+        st.session_state.confirm_clear = False
+    if "template_loaded" not in st.session_state:
+        st.session_state.template_loaded = ""
+
+    # Initialize memory manager for sidebar
+    if "memory_manager" not in st.session_state:
+        try:
+            llm_manager = LLMManager(config)
+            st.session_state.memory_manager = MemoryManager(config, llm_manager.embedder)
+        except Exception:
+            st.session_state.memory_manager = None
+
+    # ── SIDEBAR ──────────────────────────────────────────────
     with st.sidebar:
-        st.header("⚙️ Settings")
-        
-        # System Status Panel
-        st.subheader("🔍 System Status")
+        st.markdown("## ⚡ Forge Swarm")
+        st.caption("Local multi-agent code generation")
+        st.markdown("---")
+
+        # System status
+        st.markdown("### 🖥️ System Status")
         checks = SystemChecker.run_all_checks(config)
-        
-        ollama_status = "✅" if checks["ollama"][0] else "❌"
-        model_status = "✅" if checks["model"][0] else "❌"
-        emb_status = "✅" if checks["embeddings"][0] else "❌"
-        chromadb_status = "✅" if checks["chromadb"][0] else "❌"
+        for name, (passed, _) in checks.items():
+            st.markdown(f"{'✅' if passed else '❌'} **{name}**")
+
+        st.markdown("---")
+
+        # Model selector
+        st.markdown("### ⚙️ Model")
+        model = st.text_input("Ollama model", value=config["llm"]["model"])
+
+        st.markdown("---")
+
+        # Memory stats + controls
+        st.markdown("### 🧠 Memory")
+        memory_manager = st.session_state.memory_manager
+        if memory_manager:
+            stats = memory_manager.get_memory_stats()
+            st.metric("Lessons stored", stats.get("items_stored", 0))
+        else:
+            st.metric("Lessons stored", 0)
         
         col1, col2 = st.columns(2)
         with col1:
-            st.markdown(f"**Ollama:** {ollama_status}")
-            st.markdown(f"**Model:** {model_status}")
-        with col2:
-            st.markdown(f"**Embeddings:** {emb_status}")
-            st.markdown(f"**ChromaDB:** {chromadb_status}")
-        
-        # Model selector
-        st.divider()
-        st.subheader("🤖 Model Settings")
-        model_input = st.text_input(
-            "LLM Model",
-            value=config['llm']['model'],
-            help="Ollama model to use"
-        )
-        if model_input != config['llm']['model']:
-            config['llm']['model'] = model_input
-            st.rerun()
-        
-        # Memory stats
-        st.divider()
-        st.subheader("💾 Memory")
-        stats = st.session_state.memory_manager.get_stats()
-        st.markdown(f"**Items Stored:** {stats.get('total_lessons', 0)}")
-        st.markdown(f"**Collection:** {stats.get('collection_name', 'N/A')}")
-        
-        # Clear Memory with confirmation
-        if st.button("🗑️ Clear Memory"):
-            st.session_state.show_clear_confirm = True
-        
-        if st.session_state.get("show_clear_confirm", False):
-            st.warning("Clear all memories? This cannot be undone.")
-            col_y, col_n = st.columns(2)
-            with col_y:
-                if st.button("Yes, Clear", type="primary"):
-                    st.session_state.memory_manager.clear_memory()
-                    st.session_state.show_clear_confirm = False
-                    st.success("Memory cleared!")
-                    st.rerun()
-            with col_n:
-                if st.button("Cancel"):
-                    st.session_state.show_clear_confirm = False
-                    st.rerun()
-        
-        st.divider()
-        
-        # Settings
-        st.subheader("⚡ Execution Settings")
-        enable_web_search = st.checkbox("Enable Web Search", value=False)
-        max_iterations = st.slider("Max Retry Attempts", 1, 5, 3)
-        
-        st.divider()
-        
-        # Templates
-        st.subheader("📝 Quick Start Templates")
-        
-        templates = {
-            "FastAPI CRUD App": "Create a FastAPI application with User CRUD operations, SQLite database, Pydantic validation, proper error handling, and pytest tests.",
-            "Data Pipeline": "Build a data processing pipeline that reads CSV files, cleans missing values, performs statistical analysis, generates visualizations, and exports results to JSON.",
-            "Discord Bot": "Create a Discord bot with /hello, /joke, and /weather commands using discord.py, with proper error handling and help documentation.",
-            "Web Scraper": "Build a web scraper that extracts product information from an e-commerce site, saves to CSV, handles pagination, and includes rate limiting.",
-            "CLI Tool": "Create a command-line tool using Click/Typer with multiple commands, configuration file support, and comprehensive help documentation."
-        }
-        
-        selected_template = st.selectbox("Choose a template", ["Custom"] + list(templates.keys()))
-        
-        if selected_template != "Custom":
-            if st.button("Use This Template"):
-                st.session_state.template_text = templates[selected_template]
-        
-        st.divider()
-        
-        if st.button("🔧 Run Setup Again"):
-            if 'setup_complete' in st.session_state:
-                del st.session_state.setup_complete
-            st.rerun()
-        
-        if st.button("💾 Export Memory"):
-            memory_data = st.session_state.memory_manager.export_memory()
-            st.download_button(
-                "Download Backup",
-                data=json.dumps(memory_data, indent=2),
-                file_name=f"forge_swarm_memory_{datetime.now().strftime('%Y%m%d')}.json",
-                mime="application/json"
-            )
-        
-        # About section
-        st.divider()
-        st.caption("**Forge Swarm v1.0**")
-        st.caption("100% Local • Privacy-First")
-        st.caption("Powered by Ollama + CrewAI")
-    
-    # Chat interface
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-    
-    # Display chat history
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
-    
-    # User input
-    default_value = st.session_state.get('template_text', '')
-    if 'template_text' in st.session_state:
-        del st.session_state.template_text
-    
-    if prompt := st.chat_input("What should the swarm build?", key="user_input"):
-        # Add user message
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
-        
-        # Execute swarm
-        with st.chat_message("assistant"):
-            with st.status("🔄 Swarm working...", expanded=True) as status:
-                try:
-                    result = st.session_state.orchestrator.execute(
-                        prompt,
-                        enable_web_search=enable_web_search,
-                        max_iterations=max_iterations
+            if st.button("📤 Export", use_container_width=True):
+                if memory_manager:
+                    export_data = memory_manager.export_memory()
+                    st.download_button(
+                        "⬇️ Download",
+                        data=export_data,
+                        file_name="forge_swarm_memory.json",
+                        mime="application/json",
                     )
-                    
-                    if 'error' in result:
-                        status.update(label="❌ Failed", state="error")
-                        response = f"**Error**: {result['error']}"
-                        st.markdown(response)
-                        st.session_state.messages.append({"role": "assistant", "content": response})
-                    else:
-                        status.update(label="✅ Complete!", state="complete")
-                        
-                        # Get memory context used
-                        memory_context = st.session_state.memory_manager.get_relevant_lessons(prompt)
-                        memory_context_str = "\n".join(memory_context) if memory_context else "No prior context found."
-                        
-                        # Build agent log
-                        agent_log = f"""## 📋 Plan (Iteration {result['iteration']})
-{result['plan']}
+        with col2:
+            if st.button("🗑️ Clear", use_container_width=True):
+                if st.session_state.confirm_clear:
+                    if memory_manager:
+                        memory_manager.clear_memory()
+                    st.session_state.confirm_clear = False
+                    st.rerun()
+                else:
+                    st.session_state.confirm_clear = True
+                    st.warning("Click again")
 
-## 🔍 Research
-{result['research']}
+        # Memory browser
+        st.markdown("---")
+        st.markdown("### 🔍 Search Memory")
+        search_query = st.text_input("Search lessons", placeholder="e.g. FastAPI")
+        if search_query and memory_manager:
+            results = memory_manager.search_memory(search_query, n_results=5)
+            if results:
+                for r in results:
+                    dot = "🟢" if r["score"] >= 8 else "🟡" if r["score"] >= 6 else "🔴"
+                    with st.expander(f"{dot} {r['task'][:35]}..."):
+                        st.caption(f"Score: {r['score']}/10 · {r['stored_at'][:10]}")
+                        st.text(r["result"][:250] + "...")
+            else:
+                st.caption("No matching lessons.")
 
-## 🧪 Tests
-{result['tests']}
+        st.markdown("---")
 
-## ⚖️ Quality Review (Score: {result['score']}/10)
-{result['critique']}
-"""
-                        
-                        # Tabbed output
-                        tab1, tab2, tab3 = st.tabs(["💻 Final Code", "📊 Agent Log", "🧠 Memory Context"])
-                        
-                        with tab1:
-                            st.markdown(f"### 🎯 Result (Score: {result['score']}/10)")
-                            st.markdown("#### 💻 Code")
-                            st.code(result['code'], language="python")
-                            
-                            # Copy to clipboard button
-                            if st.button("📋 Copy Code", key=f"copy_code_{len(st.session_state.messages)}"):
-                                st.code(result['code'])
-                                st.success("Code displayed above - select and copy manually")
-                        
-                        with tab2:
-                            st.markdown(agent_log)
-                        
-                        with tab3:
-                            st.markdown("### 🧠 Memory Context Used")
-                            st.markdown(memory_context_str)
-                        
-                        # Store formatted response for chat history
-                        summary_response = f"### 🎯 Result (Iteration {result['iteration']}, Score: {result['score']}/10)\n\n**Code:**\n```python\n{result['code'][:500]}...\n```"
-                        st.session_state.messages.append({"role": "assistant", "content": summary_response})
-                    
-                except Exception as e:
-                    status.update(label="❌ Error", state="error")
-                    error_msg = f"**Error occurred:**\n\n```\n{str(e)}\n```\n\n**Traceback:**\n```\n{traceback.format_exc()}\n```"
-                    st.error(error_msg)
-                    st.session_state.messages.append({"role": "assistant", "content": error_msg})
-    
-    # Show template value if set
-    elif default_value:
-        st.info(f"💡 Template loaded: {selected_template}")
-        st.text_area("Template content (edit if needed):", value=default_value, height=150, key="template_display")
-        if st.button("Submit Template"):
-            st.session_state.template_text = st.session_state.template_display
-            st.rerun()
-    
-    # Footer
+        # Templates
+        st.markdown("### 📋 Templates")
+        TEMPLATES = {
+            "⚡ FastAPI CRUD": "templates/fastapi_crud.md",
+            "📊 Data Pipeline": "templates/data_pipeline.md",
+            "🤖 Discord Bot": "templates/discord_bot.md",
+            "🕷️ Web Scraper": "templates/web_scraper.md",
+            "🖥️ CLI Tool": "templates/cli_tool.md",
+        }
+        for label, path in TEMPLATES.items():
+            if st.button(label, use_container_width=True):
+                p = Path(path)
+                if p.exists():
+                    st.session_state.template_loaded = p.read_text()
+                    st.success(f"Loaded: {label}")
+                else:
+                    st.error(f"Missing: {path}")
+
+    # ── MAIN AREA ─────────────────────────────────────────────
+    st.markdown("# ⚡ Forge Swarm")
+    st.markdown("*Local multi-agent code generation. Five agents. Zero cloud.*")
     st.markdown("---")
-    st.caption("💡 **Tips:** Start with small tasks first. Make sure Ollama is running. Check sidebar for templates.")
+
+    AgentStatusDisplay.render_pipeline(current_agent_idx=-1)
+    st.markdown("---")
+
+    # Task input
+    default_text = st.session_state.template_loaded or ""
+    user_request = st.text_area(
+        "**Describe what you want to build**",
+        value=default_text,
+        placeholder="e.g. Build a FastAPI REST API for a todo app with SQLite, Pydantic models, and pytest tests",
+        height=130,
+    )
+
+    with st.expander("📎 Add context (paste code, errors, or upload a file)"):
+        context_code = st.text_area(
+            "Existing code or context",
+            placeholder="Paste any existing code, error messages, or background context here...",
+            height=180,
+        )
+        uploaded_content = FileUploadHandler.render_upload_ui()
+        if uploaded_content:
+            context_code = (context_code + "\n\n" + uploaded_content).strip()
+
+    submit = st.button("🚀 Run Forge Swarm", type="primary", use_container_width=True)
+
+    # ── EXECUTION ─────────────────────────────────────────────
+    if submit and user_request.strip():
+        llm = ChatOllama(
+            model=model,
+            base_url=config["llm"]["base_url"],
+            temperature=config["llm"]["temperature"],
+        )
+        factory = AgentFactory(llm=llm, config=config)
+        orchestrator = TaskOrchestrator(agents=factory.create_all(), config=config)
+
+        with st.status("⚡ Running Forge Swarm...", expanded=True) as status:
+            result = orchestrator.run(user_request, context_code)
+            st.session_state.last_result = result
+
+            critic = result.get("critic_result", {})
+            score = critic.get("score", 0)
+            
+            if memory_manager:
+                memory_manager.store_result(
+                    task_id=f"task_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+                    task_description=user_request,
+                    result=result.get("final_code", ""),
+                    quality_score=score,
+                    iterations=result.get("iterations", 1),
+                )
+
+            st.session_state.run_history.append({
+                "request": user_request[:60] + "...",
+                "score": score,
+                "iterations": result.get("iterations", 1),
+            })
+            status.update(label="✅ Complete!", state="complete")
+
+    # ── RESULTS ───────────────────────────────────────────────
+    if st.session_state.last_result:
+        result = st.session_state.last_result
+        critic = result.get("critic_result", {})
+
+        AgentStatusDisplay.render_score(critic.get("score", 0), critic.get("verdict", "UNKNOWN"))
+        st.caption(f"Completed in {result.get('iterations', 1)} iteration(s)")
+
+        tab1, tab2, tab3, tab4 = st.tabs(
+            ["📄 Final Code", "📋 Agent Log", "🧠 Memory Context", "🧪 Run Code"]
+        )
+
+        with tab1:
+            st.code(result.get("final_code", ""), language="python")
+
+        with tab2:
+            st.text(result.get("agent_log", ""))
+            issues = critic.get("issues", [])
+            if issues:
+                st.markdown("**Issues found by Critic:**")
+                for issue in issues:
+                    st.markdown(f"- {issue}")
+
+        with tab3:
+            memory_manager = st.session_state.memory_manager
+            if memory_manager and st.session_state.run_history:
+                similar = memory_manager.query_similar(st.session_state.run_history[-1]["request"])
+                if similar:
+                    for item in similar:
+                        with st.expander(f"📚 {item.get('task', 'Past task')[:60]}"):
+                            st.text(item.get("result", "")[:400])
+                else:
+                    st.info("No relevant past lessons found for this task.")
+            else:
+                st.info("No memory context available.")
+
+        with tab4:
+            sandbox = CodeSandbox(config)
+            sandbox.render_ui(result.get("final_code", ""))
 
 
 if __name__ == "__main__":

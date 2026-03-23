@@ -1,37 +1,53 @@
 # Forge Swarm Configuration
-# Version: 1.0
+# Version: 3.0
 
-# LLM Configuration
 llm:
-  model: "llama3.1:8b"           # Change to your preferred model
+  model: "llama3.1:8b"
   base_url: "http://localhost:11434"
-  temperature: 0.7                # 0.0 = deterministic, 1.0 = creative
-  num_ctx: 8192                   # Context window size
-  timeout: 120                    # Request timeout in seconds
+  temperature: 0.7
+  num_ctx: 8192
+  timeout: 120
 
-# Embeddings Configuration
 embeddings:
-  model: "nomic-embed-text"       # Model for vector embeddings
+  model: "nomic-embed-text"
   base_url: "http://localhost:11434"
 
-# Memory/Database Configuration
 memory:
-  db_path: "./forge_swarm_memory" # Path to ChromaDB storage
+  db_path: "./forge_swarm_memory"
   collection_name: "improvement_lessons"
-  max_lessons: 100                # Maximum lessons to keep
-  retention_days: 180             # How long to keep lessons
+  max_lessons: 200
+  min_score_to_store: 7
+  max_context_results: 5
 
-# Agent Configuration
 agents:
-  max_iterations: 3               # Max retry attempts per task
-  verbose: true                   # Enable detailed agent output
-  allow_delegation: false         # Allow agents to delegate to each other
+  max_iterations: 5
+  verbose: true
+  allow_delegation: false
+  quality_threshold: 8
+  retry_on_below_threshold: true
 
-# UI Configuration
+sandbox:
+  enabled: true
+  timeout_seconds: 10
+  max_output_lines: 100
+  allowed_imports:
+    - os.path
+    - json
+    - math
+    - datetime
+    - collections
+    - itertools
+    - re
+    - string
+    - typing
+
 ui:
-  page_title: "Forge Swarm"
-  page_icon: "🤖"
-  layout: "wide"                  # "wide" or "centered"
+  page_title: "⚡ Forge Swarm"
+  page_icon: "⚡"
+  layout: "wide"
+  theme: "dark"
+  show_agent_avatars: true
+  animate_progress: true
 
 # Optional: Web Search (requires SERPER_API_KEY environment variable)
 # serper:
