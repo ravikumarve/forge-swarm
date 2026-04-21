@@ -18,11 +18,36 @@
 [![ChromaDB](https://img.shields.io/badge/ChromaDB-Vector_Store-orange?style=flat-square)](https://trychroma.com)
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
 [![Status](https://img.shields.io/badge/Status-v3.0_Ready-brightgreen?style=flat-square)]()
+[![Gumroad](https://img.shields.io/badge/Available_on-Gumroad-FF69B4?style=flat-square)](https://gumroad.com/l/forgeswarm)
+[![Discord](https://img.shields.io/badge/Discord-Join-7289DA?style=flat-square&logo=discord&logoColor=white)](https://discord.gg/forgeswarm)
 
 <br/>
 
 > *Five agents. One mission. Your code, never leaving your machine.*
 
+---
+
+## 🚀 Quick Start (3 Commands)
+
+```bash
+# 1. Clone and install
+git clone https://github.com/ravikumarve/forge-swarm.git
+cd forge-swarm
+bash install.sh
+
+# 2. Launch Forge Swarm
+streamlit run forge_swarm_with_ui.py
+
+# 3. Open http://localhost:8501
+```
+
+> ⚡ **That's it!** Forge Swarm will auto-configure Ollama, pull required models, and launch the dashboard.
+
+---
+
+<!-- Social Preview Image -->
+<div align="center">
+  <img src="docs/social-preview.png" alt="Forge Swarm - Local Multi-Agent AI Coding" width="1200">
 </div>
 
 ---
@@ -56,6 +81,37 @@ Your Request → Planner → Researcher → Coder → Tester → Critic → Refi
 | 📁 | **File Upload** | Upload existing code or context files for agent reference |
 | 🔍 | **Memory Search** | Search through past lessons by keywords, view scores, and stored results |
 | 🔧 | **Zero Config to Start** | Works out of the box with `llama3.1:8b` and `nomic-embed-text` |
+
+---
+
+## 💰 Pricing Tiers
+
+<div align="center">
+
+| Tier | Price | What You Get |
+|---|---|---|
+| **Starter** | $29 | Full Forge Swarm v3.0 · 5 agents · Memory system · Code sandbox · All templates |
+| **Pro** | $49 | Everything in Starter + Priority support · Custom agent configs · Advanced templates |
+| **Enterprise** | $99 | Everything in Pro + Team license · White-label option · Custom integrations · Dedicated support |
+
+</div>
+
+> 💡 **All tiers include lifetime updates.** No subscriptions. No hidden fees. Your code, your rules.
+>
+> 🛒 **[Get Forge Swarm on Gumroad](https://gumroad.com/l/forgeswarm)** · 30-day money-back guarantee
+
+---
+
+## 🎯 Why Choose Forge Swarm?
+
+| Challenge | Forge Swarm Solution |
+|---|---|
+| **Single-prompt limitations** | 5 specialized agents that challenge each other's output |
+| **No learning from mistakes** | Persistent vector memory stores lessons from every task |
+| **Privacy concerns** | 100% local — your code never leaves your machine |
+| **Recurring subscription fatigue** | One-time purchase with lifetime updates |
+| **No quality control** | Critic agent scores output 1–10, auto-retries below 8/10 |
+| **Limited context** | Upload files, paste code, search past lessons for context |
 
 ---
 
