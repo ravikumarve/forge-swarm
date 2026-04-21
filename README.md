@@ -59,6 +59,37 @@ Your Request → Planner → Researcher → Coder → Tester → Critic → Refi
 
 ---
 
+## 🆚 Feature Comparison
+
+| Feature | Forge Swarm | Cursor | Windsurf | GitHub Copilot |
+|---|---|---|---|---|
+| **Multi-Agent Pipeline** | ✅ 5 specialized agents | ❌ Single agent | ❌ Single agent | ❌ Single agent |
+| **Self-Improvement Loop** | ✅ Auto-retry on low scores | ❌ No retry | ❌ No retry | ❌ No retry |
+| **Persistent Memory** | ✅ ChromaDB vector store | ❌ No memory | ❌ No memory | ❌ No memory |
+| **100% Local & Private** | ✅ Zero cloud calls | ❌ Cloud required | ❌ Cloud required | ❌ Cloud required |
+| **Code Sandbox** | ✅ Restricted execution | ❌ No sandbox | ❌ No sandbox | ❌ No sandbox |
+| **File Upload Context** | ✅ Upload files for context | ❌ No upload | ❌ No upload | ❌ No upload |
+| **Quick-Start Templates** | ✅ 5 pre-built templates | ❌ No templates | ❌ No templates | ❌ No templates |
+| **Memory Search** | ✅ Semantic search across lessons | ❌ No search | ❌ No search | ❌ No search |
+| **Real-Time Agent Status** | ✅ Visual pipeline monitoring | ❌ No status | ❌ No status | ❌ No status |
+| **Dark Theme UI** | ✅ Built-in dark theme | ✅ Dark mode | ✅ Dark mode | ✅ Dark mode |
+| **Pricing** | 💰 One-time purchase | 💰 $20/month | 💰 $15/month | 💰 $10/month |
+| **Open Source** | ✅ MIT License | ❌ Proprietary | ❌ Proprietary | ❌ Proprietary |
+
+---
+
+## 💰 Pricing Tiers
+
+| Tier | Price | What You Get |
+|---|---|---|
+| **Starter** | $29 | Full Forge Swarm v3.0 · 5 agents · Memory system · Code sandbox · All templates |
+| **Pro** | $49 | Everything in Starter + Priority support · Custom agent configs · Advanced templates |
+| **Enterprise** | $99 | Everything in Pro + Team license · White-label option · Custom integrations · Dedicated support |
+
+> 💡 **All tiers include lifetime updates.** No subscriptions. No hidden fees. Your code, your rules.
+
+---
+
 ## Architecture
 
 ```
@@ -180,6 +211,32 @@ Open **http://localhost:8501** in your browser.
 | 🤖 Discord Bot | `/hello` `/help` `/ping` `/roll` with error handling |
 | 🕷️ Web Scraper | httpx · BeautifulSoup · rate limiting · robots.txt |
 | 🖥️ CLI Tool | Typer · Rich output · YAML config · shell completion |
+
+---
+
+## 📸 Screenshots
+
+### Main Dashboard
+![Main Dashboard](docs/screenshots/main-dashboard.png)
+*Dark theme UI with real-time agent pipeline visualization*
+
+### Agent Pipeline in Action
+![Agent Pipeline](docs/screenshots/agent-pipeline.gif)
+*Watch all 5 agents work sequentially with live status updates*
+
+### Memory Search & Browse
+![Memory System](docs/screenshots/memory-search.png)
+*Search through past lessons with semantic similarity*
+
+### Code Sandbox Execution
+![Code Sandbox](docs/screenshots/code-sandbox.png)
+*Safely execute generated Python code in restricted environment*
+
+### Template Quick-Start
+![Templates](docs/screenshots/templates.png)
+*5 pre-built templates for instant productivity*
+
+> 🎬 **Video Demo:** [Watch Forge Swarm in action](https://youtube.com/watch?v=forge-swarm-demo)
 
 ---
 
@@ -307,6 +364,55 @@ Edit the code in the sandbox, click **▶️ Run Code**, and see results instant
 | Slow generation | Reduce `num_ctx` to 2048 |
 | Setup wizard loops | Confirm both Ollama is running AND models are pulled |
 | Sandbox errors | Check `config.yaml` → `sandbox.enabled: true` |
+
+---
+
+## ❓ Frequently Asked Questions
+
+### General
+
+**Q: Is Forge Swarm really 100% local?**
+A: Yes. Forge Swarm runs entirely on your machine using Ollama for LLM inference. No data leaves your computer. No cloud calls. No telemetry.
+
+**Q: What's the difference between Forge Swarm and Cursor/Windsurf?**
+A: Forge Swarm uses a multi-agent pipeline with 5 specialized agents that challenge each other's output, retry below-threshold results, and learn from past tasks. Cursor and Windsurf are single-agent tools that require cloud subscriptions.
+
+**Q: Can I use Forge Swarm offline?**
+A: Yes! Once you've installed Ollama and pulled the models, Forge Swarm works completely offline. No internet connection required.
+
+**Q: What models does Forge Swarm support?**
+A: Forge Swarm works with any Ollama model. We recommend `llama3.1:8b` for best balance of speed and quality, but you can use `mistral:7b`, `llama3.1:70b`, or any other model you have installed.
+
+### Technical
+
+**Q: What are the system requirements?**
+A: Minimum: 8 GB RAM, 4 CPU cores, 10 GB storage. Recommended: 16 GB RAM, 8+ CPU cores, 20 GB storage.
+
+**Q: Can I run Forge Swarm on Windows?**
+A: Yes! Forge Swarm works on Windows (via WSL2), Linux, and macOS. Use the provided `install.sh` (Linux/Mac) or `install.ps1` (Windows) scripts.
+
+**Q: How does the memory system work?**
+A: Forge Swarm uses ChromaDB to store lessons from completed tasks. When you start a new task, it retrieves relevant past lessons via vector similarity and injects them as context. Only lessons scoring 7+/10 are stored.
+
+**Q: Is the code sandbox safe?**
+A: The sandbox uses RestrictedPython to limit execution to safe imports only. It blocks filesystem access, network calls, and system commands. However, always review generated code before running in production.
+
+**Q: Can I customize the agents?**
+A: Yes! You can edit agent backstories in `forge_swarm_with_ui.py` or modify `config.yaml` to adjust behavior, quality thresholds, retry logic, and more.
+
+### Pricing & Support
+
+**Q: Is this a subscription?**
+A: No! Forge Swarm is a one-time purchase. All tiers include lifetime updates with no recurring fees.
+
+**Q: What's included in each tier?**
+A: All tiers include the full Forge Swarm v3.0 with 5 agents, memory system, code sandbox, and all templates. Pro and Enterprise tiers include priority support, custom configurations, and additional features.
+
+**Q: Do you offer refunds?**
+A: Yes! If Forge Swarm doesn't work on your system, we offer a 30-day money-back guarantee.
+
+**Q: How do I get support?**
+A: Email support@forgeswarm.com or join our Discord community at discord.gg/forgeswarm.
 
 ---
 
