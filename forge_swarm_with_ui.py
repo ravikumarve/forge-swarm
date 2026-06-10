@@ -1957,22 +1957,37 @@ def main() -> None:
                             st.error(f"Missing: {path}")
 
     # ── MAIN AREA ─────────────────────────────────────────────
-    st.markdown("# ⚡ Forge Swarm")
-    st.markdown("*Local multi-agent code generation. Five agents. Zero cloud.*")
-    st.markdown("---")
 
+    # LP2 Hero
+    st.markdown("""
+    <div style="margin-bottom: 32px;">
+        <div class="section-tag">COGNITIVE_PIPELINE</div>
+        <h1 style="font-family: 'Space Grotesk', sans-serif; font-size: 2.5rem; font-weight: 700; margin-top: 8px;">FIVE AGENTS.<br><span style="color: #00f3ff;">ONE MISSION.</span></h1>
+        <p style="color: rgba(255,255,255,0.6); font-size: 1rem; line-height: 1.6; max-width: 600px;">
+            Forge Swarm is a 100% local, privacy-first multi-agent AI platform for autonomous code generation. No cloud. No telemetry. No data leaks.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Agent Pipeline
     AgentStatusDisplay.render_pipeline(current_agent_idx=-1)
     st.markdown("---")
 
-    # Task input
+    # Command Prompt Input
     default_text = st.session_state.template_loaded or ""
+    
+    st.markdown('<div class="glass-panel" style="padding: 20px; margin-bottom: 24px;">', unsafe_allow_html=True)
+    st.markdown('<div style="font-family: JetBrains Mono, monospace; font-size: 10px; color: #00f3ff; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 12px;">TASK_INPUT</div>', unsafe_allow_html=True)
+    
     user_request = st.text_area(
-        "**Describe what you want to build**",
+        "**Input Task Request**",
         value=default_text,
         placeholder="e.g. Build a FastAPI REST API for a todo app with SQLite, Pydantic models, and pytest tests",
         height=130,
     )
+    st.markdown('</div>', unsafe_allow_html=True)
 
+    # Context input
     with st.expander("📎 Add context (paste code, errors, or upload a file)"):
         context_code = st.text_area(
             "Existing code or context",
@@ -2077,6 +2092,19 @@ def main() -> None:
         with tab4:
             sandbox = CodeSandbox(config)
             sandbox.render_ui(result.get("final_code", ""))
+
+    else:
+        # Empty State
+        st.markdown("---")
+        st.markdown("""
+        <div class="glass-panel" style="padding: 32px; text-align: center; margin-top: 24px;">
+            <div style="font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #00f3ff; letter-spacing: 0.2em; text-transform: uppercase; margin-bottom: 12px;">> SYSTEM_IDLE</div>
+            <div style="font-family: 'Space Grotesk', sans-serif; font-size: 24px; font-weight: 700; color: #e0e0e0; margin-bottom: 12px;">Awaiting Input</div>
+            <div style="color: rgba(255,255,255,0.4); font-size: 14px; line-height: 1.6; max-width: 500px; margin: 0 auto;">
+                Describe a coding task above and click <strong>Run Forge Swarm</strong> to start the multi-agent pipeline.
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
 
 if __name__ == "__main__":
