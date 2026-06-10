@@ -390,57 +390,71 @@ DARK_THEME_CSS = """
 </style>
 """
 
-
-# ============================================================================
-# AGENT STATUS DISPLAY
-# ============================================================================
-
-
 class AgentStatusDisplay:
     """Renders real-time agent pipeline status in Streamlit."""
 
     AGENTS = [
-        ("🗺️", "Planner", "Breaking down your request..."),
-        ("🔍", "Researcher", "Gathering patterns and context..."),
-        ("⚙️", "Coder", "Writing implementation..."),
-        ("🧪", "Tester", "Writing test suite..."),
-        ("🎯", "Critic", "Scoring output quality..."),
+        ("01", "Planner", "System architecture and mission mapping"),
+        ("02", "Researcher", "Deep documentation and web search analysis"),
+        ("03", "Coder", "Production-ready implementation entirely offline"),
+        ("04", "Tester", "Unit testing and logic verification"),
+        ("05", "Critic", "Self-improvement loop scoring (8/10 threshold)"),
     ]
 
     @staticmethod
     def render_pipeline(current_agent_idx: int = -1) -> None:
         """Render all 5 agents as status cards."""
-        st.markdown("### 🤖 Agent Pipeline")
+        st.markdown("""
+        <div style="margin-bottom: 24px;">
+            <div class="section-tag">COGNITIVE_PIPELINE</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
         cols = st.columns(5)
-        for i, (icon, name, desc) in enumerate(AgentStatusDisplay.AGENTS):
+        for i, (num, name, desc) in enumerate(AgentStatusDisplay.AGENTS):
             with cols[i]:
                 if current_agent_idx == -1:
-                    status, card_class = "⚪", ""
+                    dot_class, card_class = "idle", "state-idle"
                 elif i < current_agent_idx:
-                    status, card_class = "✅", "done"
+                    dot_class, card_class = "done", "state-done"
                 elif i == current_agent_idx:
-                    status, card_class = "🔄", "active"
+                    dot_class, card_class = "active", "state-active"
                 else:
-                    status, card_class = "⏳", ""
+                    dot_class, card_class = "idle", "state-idle"
+                
                 st.markdown(
-                    f'<div class="agent-card {card_class}">'
-                    f"{status} <strong>{icon} {name}</strong><br/>"
-                    f'<small style="color:#666">{desc}</small></div>',
+                    f'<div class="glass-card {card_class}" style="text-align: center;">'
+                    f'  <div style="font-family: JetBrains Mono, monospace; font-size: 9px; color: rgba(255,255,255,0.4); margin-bottom: 12px;">{num}_{name.upper()}</div>'
+                    f'  <div class="status-dot {dot_class}" style="margin: 0 auto 8px auto;"></div>'
+                    f'  <div style="font-family: Space Grotesk, sans-serif; font-size: 14px; font-weight: 700; margin-bottom: 4px;">{name}</div>'
+                    f'  <div style="font-size: 10px; color: rgba(255,255,255,0.4); line-height: 1.4;">{desc}</div>'
+                    f'</div>',
                     unsafe_allow_html=True,
                 )
 
     @staticmethod
     def render_score(score: int, verdict: str) -> None:
-        """Render critic score badge."""
-        color = "#4caf50" if score >= 8 else "#ff9800" if score >= 6 else "#ff4b4b"
+        """Render critic score badge with LP2 styling."""
+        if score >= 8:
+            color = "#00ff41"
+            glow = "0 0 20px rgba(0, 255, 65, 0.3)"
+        elif score >= 6:
+            color = "#f0ff00"
+            glow = "0 0 20px rgba(240, 255, 0, 0.2)"
+        else:
+            color = "#ff00ff"
+            glow = "0 0 20px rgba(255, 0, 255, 0.3)"
+        
         st.markdown(
-            f'<div style="margin:8px 0">'
-            f'<span style="background:{color};color:white;border-radius:20px;'
-            f'padding:4px 14px;font-weight:700;font-size:1rem">'
-            f"Score: {score}/10</span>&nbsp;&nbsp;"
-            f'<span style="color:{color};font-weight:600">{verdict}</span></div>',
+            f'<div style="margin: 16px 0; padding: 16px; background: rgba(255,255,255,0.02); '
+            f'border: 1px solid {color}; border-radius: 4px; text-align: center; box-shadow: {glow};">'
+            f'  <div style="font-family: JetBrains Mono, monospace; font-size: 10px; color: rgba(255,255,255,0.4); margin-bottom: 8px; letter-spacing: 0.2em;">CRITIC SCORE</div>'
+            f'  <div style="font-family: Space Grotesk, sans-serif; font-size: 48px; font-weight: 700; color: {color}; line-height: 1;">{score}<span style="font-size: 18px; opacity: 0.6;">/10</span></div>'
+            f'  <div style="font-family: JetBrains Mono, monospace; font-size: 11px; color: {color}; margin-top: 8px; letter-spacing: 0.1em; text-transform: uppercase;">{verdict}</div>'
+            f'</div>',
             unsafe_allow_html=True,
         )
+
 
 
 # ============================================================================
@@ -869,7 +883,7 @@ class MemoryManager:
         quality_score: int = 0,
         iterations: int = 1,
     ) -> None:
-        """Store a completed task result — only if score meets threshold."""
+        """Store a completed task result - only if score meets threshold."""
         min_score = self.config.get("min_score_to_store", 7)
         if quality_score < min_score:
             print(
