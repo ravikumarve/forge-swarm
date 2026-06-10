@@ -343,6 +343,50 @@ DARK_THEME_CSS = """
         border: 1px solid rgba(255, 255, 255, 0.1) !important;
         color: #e0e0e0 !important;
     }
+    
+    /* ===== GLASS CARD SYSTEM ===== */
+    .glass-panel {
+        background: rgba(255, 255, 255, 0.02);
+        backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 4px;
+    }
+    .glass-card {
+        background: rgba(255, 255, 255, 0.02);
+        backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 4px;
+        padding: 16px;
+        transition: all 0.3s ease;
+    }
+    .glass-card:hover {
+        background: rgba(255, 255, 255, 0.04);
+        border-color: rgba(0, 243, 255, 0.2);
+        box-shadow: 0 0 20px rgba(0, 243, 255, 0.05);
+    }
+    .glass-card.state-idle { border-color: rgba(255,255,255,0.05); opacity: 0.6; }
+    .glass-card.state-active { border-color: rgba(0,243,255,0.4); box-shadow: 0 0 15px rgba(0,243,255,0.1); }
+    .glass-card.state-done { border-color: rgba(0,255,65,0.3); opacity: 0.7; }
+    .glass-card.state-error { border-color: rgba(255,0,255,0.4); box-shadow: 0 0 15px rgba(255,0,255,0.1); }
+    .status-dot {
+        width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 8px;
+    }
+    .status-dot.idle { background: rgba(255,255,255,0.2); }
+    .status-dot.active { background: #00f3ff; box-shadow: 0 0 8px #00f3ff; animation: pulse-cyan 2s infinite; }
+    .status-dot.done { background: #00ff41; }
+    .status-dot.error { background: #ff00ff; box-shadow: 0 0 8px #ff00ff; }
+    @keyframes pulse-cyan {
+        0% { opacity: 1; box-shadow: 0 0 4px #00f3ff; }
+        50% { opacity: 0.5; box-shadow: 0 0 16px #00f3ff; }
+        100% { opacity: 1; box-shadow: 0 0 4px #00f3ff; }
+    }
+    .font-mono { font-family: 'JetBrains Mono', monospace; }
+    .font-brand { font-family: 'Space Grotesk', sans-serif; }
+    .section-tag {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 10px; letter-spacing: 0.4em; text-transform: uppercase;
+        color: rgba(255,255,255,0.4); border-left: 2px solid #00f3ff; padding-left: 12px;
+    }
 </style>
 """
 
