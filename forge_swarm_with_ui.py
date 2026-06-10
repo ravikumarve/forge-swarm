@@ -20,6 +20,7 @@ import sys
 import json
 import subprocess
 import traceback
+import requests
 from pathlib import Path
 from typing import Optional, Dict, List, Any
 from datetime import datetime
@@ -33,46 +34,96 @@ os.environ["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY", "sk-dummy-ollama-only
 import streamlit as st
 import yaml
 from crewai import Agent, Task, Crew, Process
-from crewai_tools import SerperDevTool
+from crewai.llms.base_llm import BaseLLM
+
+try:
+    from crewai_tools import SerperDevTool
+
+    SERPER_AVAILABLE = True
+except ImportError:
+    SERPER_AVAILABLE = False
+    SerperDevTool = None
 import chromadb
 from chromadb.config import Settings
 from dotenv import load_dotenv
 import ollama
+import litellm
 
 load_dotenv()
 
 
-class ChatOllama:
-    """Wrapper for ollama client compatible with CrewAI."""
+class LLMProvider(BaseLLM):
+    """Generic LLM provider supporting Ollama and NVIDIA NIM."""
 
-    def __init__(self, model: str, base_url: str = "http://localhost:11434", temperature: float = 0.7, num_ctx: int = 8192):
-        self.model = model
-        self.base_url = base_url
-        self.temperature = temperature
-        self.num_ctx = num_ctx
-        self.client = ollama.Client(host=base_url)
+    def __init__(
+        self,
+        provider: str,
+        model: str,
+        base_url: str = "",
+        temperature: float = 0.7,
+        num_ctx: int = 8192,
+        api_key: str = "",
+    ):
+        super().__init__(model=model, base_url=base_url, temperature=temperature)
+        self.provider = provider
+        self.api_key = api_key
+        self._num_ctx = num_ctx
 
-    def invoke(self, prompt: str) -> str:
-        """Generate a response using the Ollama API."""
-        response = self.client.generate(
-            model=self.model,
-            prompt=prompt,
-            options={
-                "temperature": self.temperature,
-                "num_ctx": self.num_ctx,
-            }
-        )
-        return response["response"]
+        if provider == "ollama":
+            self._litellm_model = f"ollama/{model}"
+            self._api_base = base_url or "http://localhost:11434"
+        elif provider == "nvidia_nim":
+            self._litellm_model = f"nvidia_nim/{model}"
+            self._api_base = base_url or "https://integrate.api.nvidia.com/v1"
+            # Set API key for NVIDIA NIM
+            if api_key:
+                litellm.api_key = api_key
+        else:
+            raise ValueError(f"Unsupported LLM provider: {provider}")
 
-    def __call__(self, prompt: str) -> str:
+    def call(self, messages: list[dict], **kwargs) -> str:
+        """Call the LLM via litellm."""
+        # Extract CrewAI-specific kwargs
+        tools = kwargs.pop("tools", None)
+        callbacks = kwargs.pop("callbacks", None)
+        available_functions = kwargs.pop("available_functions", None)
+        from_task = kwargs.pop("from_task", None)
+        from_agent = kwargs.pop("from_agent", None)
+        response_model = kwargs.pop("response_model", None)
+
+        # Build completion parameters
+        completion_params = {
+            "model": self._litellm_model,
+            "messages": messages,
+            "api_base": self._api_base,
+            "temperature": self.temperature if self.temperature is not None else 0.7,
+        }
+
+        # Add provider-specific parameters
+        if self.provider == "ollama":
+            completion_params["num_ctx"] = self._num_ctx
+        elif self.provider == "nvidia_nim":
+            completion_params["max_tokens"] = self._num_ctx
+
+        # Add any remaining kwargs
+        completion_params.update(kwargs)
+
+        response = litellm.completion(**completion_params)
+        return response["choices"][0]["message"]["content"]
+
+    def __call__(self, messages: list[dict], **kwargs) -> str:
         """Allow the instance to be called as a function."""
-        return self.invoke(prompt)
+        return self.call(messages, **kwargs)
 
 
 class OllamaEmbeddings:
     """Wrapper for ollama embeddings compatible with ChromaDB."""
 
-    def __init__(self, model: str = "nomic-embed-text", base_url: str = "http://localhost:11434"):
+    def __init__(
+        self,
+        model: str = "nomic-embed-text:latest",
+        base_url: str = "http://localhost:11434",
+    ):
         self.model = model
         self.base_url = base_url
         self.client = ollama.Client(host=base_url)
@@ -93,64 +144,205 @@ class OllamaEmbeddings:
 
 DARK_THEME_CSS = """
 <style>
-    .stApp { background-color: #0d0d0d; color: #e0e0e0; }
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+    
+    /* Global Background & Text */
+    .stApp { 
+        background-color: #000000; 
+        color: #e0e0e0; 
+        font-family: 'Space Grotesk', sans-serif;
+    }
+    
+    /* Ambient Background Effect */
+    .stApp::before {
+        content: "";
+        position: fixed;
+        width: 80vw;
+        height: 80vw;
+        background: radial-gradient(circle, rgba(0, 243, 255, 0.03) 0%, transparent 70%);
+        top: -20vh;
+        left: -10vw;
+        filter: blur(100px);
+        z-index: 0;
+        pointer-events: none;
+    }
+    
+    .stApp::after {
+        content: "";
+        position: fixed;
+        width: 60vw;
+        height: 60vw;
+        background: radial-gradient(circle, rgba(0, 255, 65, 0.02) 0%, transparent 70%);
+        bottom: -10vh;
+        right: -10vw;
+        filter: blur(120px);
+        z-index: 0;
+        pointer-events: none;
+    }
+    
+    /* Grain Texture Overlay */
+    .stApp > div:first-child::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.03'/%3E%3C/svg%3E");
+        pointer-events: none;
+        z-index: 9998;
+    }
+    
+    /* Sidebar */
     [data-testid="stSidebar"] {
-        background-color: #111111;
-        border-right: 1px solid #222222;
+        background-color: rgba(10, 10, 15, 0.95) !important;
+        backdrop-filter: blur(20px) !important;
+        border-right: 1px solid rgba(255, 255, 255, 0.05) !important;
     }
+    
+    /* Expanders */
     [data-testid="stExpander"] {
-        background-color: #161616;
-        border: 1px solid #2a2a2a;
-        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.02) !important;
+        backdrop-filter: blur(20px) !important;
+        border: 1px solid rgba(255, 255, 255, 0.05) !important;
+        border-radius: 4px !important;
     }
-    .stTextArea textarea, .stTextInput input {
-        background-color: #1a1a1a !important;
+    
+    /* Text Areas */
+    .stTextArea textarea {
+        background-color: #0a0a0f !important;
         color: #e0e0e0 !important;
-        border: 1px solid #333333 !important;
-        border-radius: 6px !important;
-        font-family: 'JetBrains Mono', 'Fira Code', monospace !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        border-radius: 4px !important;
+        font-family: 'JetBrains Mono', monospace !important;
+        font-size: 13px !important;
     }
+    .stTextArea textarea:focus {
+        border-color: #00f3ff !important;
+        box-shadow: 0 0 8px rgba(0, 243, 255, 0.3) !important;
+    }
+    
+    /* Text Inputs */
+    .stTextInput input {
+        background-color: #0a0a0f !important;
+        color: #e0e0e0 !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        border-radius: 4px !important;
+        font-family: 'JetBrains Mono', monospace !important;
+    }
+    .stTextInput input:focus {
+        border-color: #00f3ff !important;
+        box-shadow: 0 0 8px rgba(0, 243, 255, 0.3) !important;
+    }
+    
+    /* Select Boxes */
+    .stSelectbox div[data-baseweb="select"] {
+        background-color: #0a0a0f !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        border-radius: 4px !important;
+    }
+    
+    /* Buttons - Primary */
     .stButton > button[kind="primary"] {
-        background: linear-gradient(135deg, #ff4b4b, #ff6b35) !important;
-        color: white !important;
-        border: none !important;
-        border-radius: 6px !important;
+        background: rgba(0, 243, 255, 0.1) !important;
+        color: #00f3ff !important;
+        border: 1px solid rgba(0, 243, 255, 0.3) !important;
+        border-radius: 4px !important;
+        font-family: 'JetBrains Mono', monospace !important;
         font-weight: 600 !important;
-        letter-spacing: 0.5px !important;
-        transition: all 0.2s ease !important;
+        letter-spacing: 0.1em !important;
+        text-transform: uppercase !important;
+        font-size: 11px !important;
+        transition: all 0.3s ease !important;
     }
     .stButton > button[kind="primary"]:hover {
+        background: rgba(0, 243, 255, 0.2) !important;
+        box-shadow: 0 0 20px rgba(0, 243, 255, 0.2) !important;
         transform: translateY(-1px) !important;
-        box-shadow: 0 4px 20px rgba(255, 75, 75, 0.4) !important;
     }
+    
+    /* Buttons - Secondary */
+    .stButton > button:not([kind="primary"]) {
+        background: rgba(255, 255, 255, 0.02) !important;
+        color: rgba(255, 255, 255, 0.6) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        border-radius: 4px !important;
+        font-family: 'JetBrains Mono', monospace !important;
+        font-size: 10px !important;
+        letter-spacing: 0.1em !important;
+        text-transform: uppercase !important;
+        transition: all 0.2s ease !important;
+    }
+    .stButton > button:not([kind="primary"]):hover {
+        background: rgba(255, 255, 255, 0.05) !important;
+        color: #ffffff !important;
+        border-color: rgba(255, 255, 255, 0.2) !important;
+    }
+    
+    /* Tabs */
     .stTabs [data-baseweb="tab-list"] {
-        background-color: #111111;
-        border-bottom: 1px solid #222222;
+        background-color: transparent !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
     }
-    .stTabs [data-baseweb="tab"] { color: #888888; font-weight: 500; }
+    .stTabs [data-baseweb="tab"] { 
+        color: rgba(255, 255, 255, 0.4) !important; 
+        font-weight: 500 !important;
+        font-family: 'JetBrains Mono', monospace !important;
+        font-size: 11px !important;
+        letter-spacing: 0.1em !important;
+        text-transform: uppercase !important;
+    }
     .stTabs [aria-selected="true"] {
-        color: #ff4b4b !important;
-        border-bottom: 2px solid #ff4b4b !important;
+        color: #00f3ff !important;
+        border-bottom: 2px solid #00f3ff !important;
     }
+    
+    /* Code Blocks */
     .stCodeBlock {
         background-color: #0a0a0a !important;
-        border: 1px solid #1e1e1e !important;
-        border-radius: 8px !important;
+        border: 1px solid rgba(255, 255, 255, 0.05) !important;
+        border-radius: 4px !important;
+        font-family: 'JetBrains Mono', monospace !important;
     }
-    .agent-card {
-        background: #161616;
-        border: 1px solid #2a2a2a;
-        border-radius: 8px;
-        padding: 12px 16px;
-        margin: 4px 0;
-        font-family: monospace;
-        font-size: 0.85rem;
+    .stCodeBlock pre {
+        background-color: #0a0a0a !important;
     }
-    .agent-card.active { border-color: #ff4b4b; box-shadow: 0 0 12px rgba(255,75,75,0.2); }
-    .agent-card.done { border-color: #4caf50; opacity: 0.7; }
-    ::-webkit-scrollbar { width: 6px; }
-    ::-webkit-scrollbar-track { background: #111111; }
-    ::-webkit-scrollbar-thumb { background: #333333; border-radius: 3px; }
+    
+    /* Metric Cards */
+    div[data-testid="stMetricValue"] {
+        font-family: 'Space Grotesk', sans-serif !important;
+        font-weight: 600 !important;
+    }
+    
+    /* Scrollbars */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0a0a0f; }
+    ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(0, 243, 255, 0.3); }
+    
+    /* Status elements */
+    div[data-testid="stStatus"] {
+        background: rgba(255, 255, 255, 0.02) !important;
+        border: 1px solid rgba(255, 255, 255, 0.05) !important;
+    }
+    
+    /* File uploader */
+    .stFileUploader {
+        background: rgba(255, 255, 255, 0.02) !important;
+        border: 1px dashed rgba(255, 255, 255, 0.1) !important;
+        border-radius: 4px !important;
+    }
+    
+    /* Toast notifications */
+    .stToast {
+        background: rgba(10, 10, 15, 0.95) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        backdrop-filter: blur(20px) !important;
+    }
+    
+    /* Tooltips */
+    .stTooltip {
+        background: rgba(10, 10, 15, 0.95) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        color: #e0e0e0 !important;
+    }
 </style>
 """
 
@@ -158,6 +350,7 @@ DARK_THEME_CSS = """
 # ============================================================================
 # AGENT STATUS DISPLAY
 # ============================================================================
+
 
 class AgentStatusDisplay:
     """Renders real-time agent pipeline status in Streamlit."""
@@ -187,7 +380,7 @@ class AgentStatusDisplay:
                     status, card_class = "⏳", ""
                 st.markdown(
                     f'<div class="agent-card {card_class}">'
-                    f'{status} <strong>{icon} {name}</strong><br/>'
+                    f"{status} <strong>{icon} {name}</strong><br/>"
                     f'<small style="color:#666">{desc}</small></div>',
                     unsafe_allow_html=True,
                 )
@@ -200,7 +393,7 @@ class AgentStatusDisplay:
             f'<div style="margin:8px 0">'
             f'<span style="background:{color};color:white;border-radius:20px;'
             f'padding:4px 14px;font-weight:700;font-size:1rem">'
-            f'Score: {score}/10</span>&nbsp;&nbsp;'
+            f"Score: {score}/10</span>&nbsp;&nbsp;"
             f'<span style="color:{color};font-weight:600">{verdict}</span></div>',
             unsafe_allow_html=True,
         )
@@ -210,45 +403,44 @@ class AgentStatusDisplay:
 # CONFIGURATION MANAGEMENT
 # ============================================================================
 
+
 class Config:
     """Centralized configuration management"""
-    
+
     DEFAULT_CONFIG = {
-        'llm': {
-            'model': 'llama3.1:8b',
-            'base_url': 'http://localhost:11434',
-            'temperature': 0.7,
-            'num_ctx': 8192,
-            'timeout': 120
+        "llm": {
+            "model": "llama3.1:8b",
+            "base_url": "http://localhost:11434",
+            "temperature": 0.7,
+            "num_ctx": 8192,
+            "timeout": 120,
         },
-        'embeddings': {
-            'model': 'nomic-embed-text',
-            'base_url': 'http://localhost:11434'
+        "embeddings": {
+            "model": "nomic-embed-text",
+            "base_url": "http://localhost:11434",
         },
-        'memory': {
-            'db_path': './forge_swarm_memory',
-            'collection_name': 'improvement_lessons',
-            'max_lessons': 100,
-            'retention_days': 180
+        "memory": {
+            "db_path": "./forge_swarm_memory",
+            "collection_name": "improvement_lessons",
+            "max_lessons": 100,
+            "retention_days": 180,
         },
-        'agents': {
-            'max_iterations': 3,
-            'verbose': True,
-            'allow_delegation': False
+        "agents": {
+            "max_iterations": 3,
+            "verbose": True,
+            "allow_delegation": False,
+            "quality_threshold": 8,
+            "retry_on_below_threshold": True,
         },
-        'ui': {
-            'page_title': 'Forge Swarm',
-            'page_icon': '🤖',
-            'layout': 'wide'
-        }
+        "ui": {"page_title": "Forge Swarm", "page_icon": "🤖", "layout": "wide"},
     }
-    
+
     @classmethod
-    def load(cls, config_path: str = 'config.yaml') -> Dict[str, Any]:
+    def load(cls, config_path: str = "config.yaml") -> Dict[str, Any]:
         """Load config from file or return defaults"""
         if os.path.exists(config_path):
             try:
-                with open(config_path, 'r') as f:
+                with open(config_path, "r") as f:
                     user_config = yaml.safe_load(f)
                 # Merge with defaults
                 config = cls.DEFAULT_CONFIG.copy()
@@ -257,39 +449,41 @@ class Config:
             except Exception as e:
                 st.warning(f"Could not load config: {e}. Using defaults.")
         return cls.DEFAULT_CONFIG
-    
+
     @classmethod
-    def save(cls, config: Dict[str, Any], config_path: str = 'config.yaml'):
+    def save(cls, config: Dict[str, Any], config_path: str = "config.yaml"):
         """Save config to file"""
         try:
-            with open(config_path, 'w') as f:
+            with open(config_path, "w") as f:
                 yaml.dump(config, f, default_flow_style=False)
             return True
         except Exception as e:
             st.error(f"Could not save config: {e}")
             return False
-    
+
     @classmethod
     def get_ollama_config(cls, config: Dict[str, Any] = None) -> Dict[str, Any]:
         """Return Ollama-specific config block (llm + embeddings)."""
         if config is None:
             config = cls.load()
         return {
-            "base_url": config.get('llm', {}).get('base_url', 'http://localhost:11434'),
-            "model": config.get('llm', {}).get('model', 'llama3.1:8b'),
-            "embedding_model": config.get('embeddings', {}).get('model', 'nomic-embed-text'),
-            "temperature": config.get('llm', {}).get('temperature', 0.7),
-            "timeout": config.get('llm', {}).get('timeout', 120),
+            "base_url": config.get("llm", {}).get("base_url", "http://localhost:11434"),
+            "model": config.get("llm", {}).get("model", "llama3.1:8b"),
+            "embedding_model": config.get("embeddings", {}).get(
+                "model", "nomic-embed-text"
+            ),
+            "temperature": config.get("llm", {}).get("temperature", 0.7),
+            "timeout": config.get("llm", {}).get("timeout", 120),
         }
-    
+
     @classmethod
     def get_agent_config(cls, config: Dict[str, Any] = None) -> Dict[str, Any]:
         """Return agent-specific config block."""
         if config is None:
             config = cls.load()
         return {
-            "max_iterations": config.get('agents', {}).get('max_iterations', 3),
-            "verbose": config.get('agents', {}).get('verbose', True),
+            "max_iterations": config.get("agents", {}).get("max_iterations", 3),
+            "verbose": config.get("agents", {}).get("verbose", True),
             "memory": True,
         }
 
@@ -298,179 +492,141 @@ class Config:
 # SYSTEM HEALTH CHECKS
 # ============================================================================
 
+
 class SystemChecker:
     """Check system dependencies and health"""
-    
+
     @staticmethod
     def check_ollama() -> tuple[bool, str]:
         """Check if Ollama is running"""
         try:
-            result = subprocess.run(
-                ['curl', '-s', 'http://localhost:11434/api/tags'],
-                capture_output=True,
-                timeout=5
-            )
-            if result.returncode == 0:
+            response = requests.get("http://localhost:11434/api/tags", timeout=5)
+            if response.status_code == 200:
                 return True, "Ollama is running"
-            return False, "Ollama is not responding"
-        except subprocess.TimeoutExpired:
-            return False, "Ollama connection timeout"
-        except FileNotFoundError:
-            # Try using Python requests as fallback
-            try:
-                import requests
-                response = requests.get('http://localhost:11434/api/tags', timeout=5)
-                if response.status_code == 200:
-                    return True, "Ollama is running"
-                return False, f"Ollama returned status {response.status_code}"
-            except Exception:
-                return False, "Ollama is not running. Start it with: ollama serve"
-        except Exception as e:
-            return False, f"Error checking Ollama: {str(e)}"
-    
-    @staticmethod
-    def check_model(model_name: str, fallback_models: List[str] = None) -> tuple[bool, str]:
-        """Check if a model is available, try fallbacks if not found"""
-        if fallback_models is None:
-            fallback_models = ["llama3", "llama3.2", "mistral", "phi3", "gemma2", "qwen2.5"]
-        
-        try:
-            result = subprocess.run(
-                ['ollama', 'list'],
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
-            available = result.stdout
-            
-            # Check requested model
-            if model_name in available:
-                return True, f"Model {model_name} is available"
-            
-            # Check fallback models
-            for fallback in fallback_models:
-                if fallback in available:
-                    return True, f"Model {fallback} is available"
-            
-            return False, f"No model found. Pull one with: ollama pull llama3.1:8b"
-        except Exception as e:
-            return False, f"Could not check model: {str(e)}"
-    
+            return False, f"Ollama returned status {response.status_code}"
+        except Exception:
+            return False, "Ollama is not running. Start it with: ollama serve"
+
     @staticmethod
     def get_available_models() -> List[str]:
-        """Get list of available Ollama models"""
+        """Get list of available Ollama models from API, excluding embeddings."""
         try:
-            result = subprocess.run(
-                ['ollama', 'list'],
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
-            lines = result.stdout.strip().split('\n')[1:]  # Skip header
-            models = [line.split()[0] for line in lines if line.strip()]
-            return models
+            response = requests.get("http://localhost:11434/api/tags", timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                models = [m.get("name", "") for m in data.get("models", [])]
+                # Filter out embedding models
+                models = [m for m in models if "embed" not in m.lower()]
+                return models
+            return []
         except Exception:
             return []
-    
+
+    @staticmethod
+    def check_model(model_name: str) -> tuple[bool, str]:
+        """Check if a model is available"""
+        available = SystemChecker.get_available_models()
+
+        if model_name in available:
+            return True, f"Model {model_name} is available"
+
+        if available:
+            first_model = available[0]
+            return True, f"Model {first_model} is available"
+
+        return False, "No LLM model found. Pull one with: ollama pull qwen2.5:3b"
+
     @staticmethod
     def check_chromadb(persist_dir: str) -> tuple[bool, str]:
         """Check if ChromaDB can be initialized at path."""
         try:
             db_path = Path(persist_dir)
             db_path.mkdir(parents=True, exist_ok=True)
-            
+
             test_client = chromadb.PersistentClient(
-                path=str(db_path),
-                settings=Settings(anonymized_telemetry=False)
+                path=str(db_path), settings=Settings(anonymized_telemetry=False)
             )
             test_collection = test_client.get_or_create_collection("test_check")
             test_client.delete_collection("test_check")
             return True, "ChromaDB is accessible"
         except Exception as e:
             return False, f"ChromaDB error: {str(e)}"
-    
+
     @staticmethod
     def run_all_checks(config: Dict[str, Any]) -> Dict[str, tuple[bool, str]]:
         """Run all system checks, return dict of {check_name: (passed, message)}."""
         ollama_ok, ollama_msg = SystemChecker.check_ollama()
-        model_name = config.get('llm', {}).get('model', 'llama3.1:8b')
-        model_ok, model_msg = SystemChecker.check_model(model_name)
-        emb_model = config.get('embeddings', {}).get('model', 'nomic-embed-text')
-        emb_ok, emb_msg = SystemChecker.check_model(emb_model)
-        chromadb_path = config.get('memory', {}).get('db_path', './forge_swarm_memory')
+
+        # Check embedding model specifically
+        emb_model = config.get("embeddings", {}).get("model", "nomic-embed-text")
+        emb_ok, emb_msg = SystemChecker.check_embedding_model(emb_model)
+
+        # Check LLM model
+        available_models = SystemChecker.get_available_models()
+        if available_models:
+            model_ok, model_msg = True, f"Model {available_models[0]} is available"
+        else:
+            model_ok, model_msg = False, "No LLM model found"
+
+        chromadb_path = config.get("memory", {}).get("db_path", "./forge_swarm_memory")
         chromadb_ok, chromadb_msg = SystemChecker.check_chromadb(chromadb_path)
-        
+
         return {
             "ollama": (ollama_ok, ollama_msg),
             "model": (model_ok, model_msg),
             "embeddings": (emb_ok, emb_msg),
             "chromadb": (chromadb_ok, chromadb_msg),
         }
-    
+
+    @staticmethod
+    def check_embedding_model(model_name: str) -> tuple[bool, str]:
+        """Check if the embedding model is available."""
+        try:
+            response = requests.get("http://localhost:11434/api/tags", timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                models = [m.get("name", "") for m in data.get("models", [])]
+                # Check specifically for embedding models
+                for m in models:
+                    if "embed" in m.lower():
+                        return True, f"Embeddings: {m}"
+                return False, "Embedding model not found"
+            return False, "Could not check embedding model"
+        except Exception:
+            return False, "Could not check embedding model"
+
     @staticmethod
     def get_best_available_model() -> str:
-        """Return the best available model from common options."""
-        preferred = ["llama3.1:8b", "llama3.1", "llama3.2", "llama3", "mistral", "phi3", "gemma2", "qwen2.5"]
-        
-        try:
-            result = subprocess.run(
-                ['ollama', 'list'],
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
-            available = result.stdout
-            
-            for model in preferred:
-                if model in available:
-                    return model
-            
-            # Return first available model if none of the preferred exist
-            lines = result.stdout.strip().split('\n')[1:]  # Skip header
-            if lines:
-                return lines[0].split()[0]
-            
-            return "llama3.1:8b"  # Default
-        except Exception:
-            return "llama3.1:8b"
+        """Return the first available LLM model (non-embedding)."""
+        available = SystemChecker.get_available_models()
+        if available:
+            return available[0]
+        return "qwen2.5:3b"  # Default fallback
 
 
 # ============================================================================
 # LLM MANAGER
 # ============================================================================
 
+
 class LLMManager:
     """Manage LLM and embeddings initialization"""
-    
+
     def __init__(self, config: Dict[str, Any]):
         self.config = config
         self._llm = None
         self._embedder = None
-    
-    @property
-    def llm(self) -> ChatOllama:
-        """Lazy-load LLM"""
-        if self._llm is None:
-            llm_config = self.config['llm']
-            self._llm = ChatOllama(
-                model=llm_config['model'],
-                base_url=llm_config['base_url'],
-                temperature=llm_config['temperature'],
-                num_ctx=llm_config['num_ctx']
-            )
-        return self._llm
-    
+
     @property
     def embedder(self) -> OllamaEmbeddings:
         """Lazy-load embeddings"""
         if self._embedder is None:
-            emb_config = self.config['embeddings']
+            emb_config = self.config["embeddings"]
             self._embedder = OllamaEmbeddings(
-                model=emb_config['model'],
-                base_url=emb_config['base_url']
+                model=emb_config["model"], base_url=emb_config["base_url"]
             )
         return self._embedder
-    
+
     def test_connection(self) -> tuple[bool, str]:
         """Test LLM connection"""
         try:
@@ -484,113 +640,116 @@ class LLMManager:
 # MEMORY MANAGER
 # ============================================================================
 
+
 class MemoryManager:
     """Manage long-term memory with ChromaDB"""
-    
+
     def __init__(self, config: Dict[str, Any], embedder: OllamaEmbeddings):
-        self.config = config['memory']
+        self.config = config["memory"]
         self.embedder = embedder
         self.client = None
         self.collection = None
         self._initialize_db()
-    
+
     def _initialize_db(self):
         """Initialize ChromaDB"""
         try:
-            db_path = self.config['db_path']
+            db_path = self.config["db_path"]
             Path(db_path).mkdir(parents=True, exist_ok=True)
-            
+
             self.client = chromadb.PersistentClient(
-                path=db_path,
-                settings=Settings(anonymized_telemetry=False)
+                path=db_path, settings=Settings(anonymized_telemetry=False)
             )
             self.collection = self.client.get_or_create_collection(
-                name=self.config['collection_name']
+                name=self.config["collection_name"]
             )
         except Exception as e:
             st.error(f"Failed to initialize memory database: {e}")
             raise
-    
-    def save_lesson(self, task_desc: str, output: str, critic_feedback: str, score: float):
+
+    def save_lesson(
+        self, task_desc: str, output: str, critic_feedback: str, score: float
+    ):
         """Save a lesson to memory"""
         try:
             text = f"Task: {task_desc}\nFeedback: {critic_feedback}"
             embedding = self.embedder.embed_documents([text])[0]
-            
+
             lesson_id = f"lesson_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{self.collection.count()}"
-            
+
             self.collection.add(
                 documents=[critic_feedback],
-                metadatas=[{
-                    "task": task_desc[:200],
-                    "output_summary": output[:200],
-                    "score": score,
-                    "timestamp": datetime.now().isoformat()
-                }],
+                metadatas=[
+                    {
+                        "task": task_desc[:200],
+                        "output_summary": output[:200],
+                        "score": score,
+                        "timestamp": datetime.now().isoformat(),
+                    }
+                ],
                 ids=[lesson_id],
-                embeddings=[embedding]
+                embeddings=[embedding],
             )
-            
+
             # Prune old lessons if needed
             self._prune_old_lessons()
-            
+
         except Exception as e:
             st.warning(f"Could not save lesson: {e}")
-    
+
     def get_relevant_lessons(self, task_desc: str, n: int = 3) -> List[str]:
         """Retrieve similar past lessons"""
         try:
             if self.collection.count() == 0:
                 return []
-            
+
             query_emb = self.embedder.embed_documents([task_desc])[0]
             results = self.collection.query(
-                query_embeddings=[query_emb],
-                n_results=min(n, self.collection.count())
+                query_embeddings=[query_emb], n_results=min(n, self.collection.count())
             )
-            
-            if not results['metadatas'] or not results['metadatas'][0]:
+
+            if not results["metadatas"] or not results["metadatas"][0]:
                 return []
-            
+
             lessons = []
-            for metadata, doc in zip(results['metadatas'][0], results['documents'][0]):
-                score = metadata.get('score', 'N/A')
-                task = metadata.get('task', 'Unknown task')
+            for metadata, doc in zip(results["metadatas"][0], results["documents"][0]):
+                score = metadata.get("score", "N/A")
+                task = metadata.get("task", "Unknown task")
                 lessons.append(f"[Score: {score}] {task}: {doc}")
-            
+
             return lessons
-            
+
         except Exception as e:
             st.warning(f"Could not retrieve lessons: {e}")
             return []
-    
+
     def _prune_old_lessons(self):
         """Remove old lessons to stay within max_lessons limit"""
         try:
-            max_lessons = self.config['max_lessons']
+            max_lessons = self.config["max_lessons"]
             current_count = self.collection.count()
-            
+
             if current_count > max_lessons:
                 # Get all items sorted by timestamp
                 all_items = self.collection.get()
-                if all_items['metadatas']:
+                if all_items["metadatas"]:
                     # Sort by timestamp and remove oldest
                     items_with_time = [
-                        (id_, meta.get('timestamp', ''))
-                        for id_, meta in zip(all_items['ids'], all_items['metadatas'])
+                        (id_, meta.get("timestamp", ""))
+                        for id_, meta in zip(all_items["ids"], all_items["metadatas"])
                     ]
                     items_with_time.sort(key=lambda x: x[1])
-                    
+
                     # Remove oldest items
-                    to_remove = items_with_time[:current_count - max_lessons]
+                    to_remove = items_with_time[: current_count - max_lessons]
                     ids_to_remove = [item[0] for item in to_remove]
-                    
+
                     if ids_to_remove:
                         self.collection.delete(ids=ids_to_remove)
-                        
+
         except Exception as e:
             st.warning(f"Could not prune old lessons: {e}")
-    
+
     def export_memory(self) -> str:
         """Export all stored lessons as JSON string for download."""
         try:
@@ -637,18 +796,18 @@ class MemoryManager:
         except Exception as e:
             print(f"❌ Memory search failed: {e}")
             return []
-    
+
     def get_stats(self) -> Dict[str, Any]:
         """Get memory statistics"""
         try:
             return {
                 "total_lessons": self.collection.count(),
-                "collection_name": self.config['collection_name'],
-                "max_lessons": self.config['max_lessons']
+                "collection_name": self.config["collection_name"],
+                "max_lessons": self.config["max_lessons"],
             }
         except Exception:
             return {"total_lessons": 0}
-    
+
     def clear_memory(self) -> bool:
         """Delete all stored memories. Returns True on success."""
         try:
@@ -657,7 +816,7 @@ class MemoryManager:
         except Exception as e:
             st.error(f"Could not clear memory: {e}")
             return False
-    
+
     def store_result(
         self,
         task_id: str,
@@ -669,37 +828,37 @@ class MemoryManager:
         """Store a completed task result — only if score meets threshold."""
         min_score = self.config.get("min_score_to_store", 7)
         if quality_score < min_score:
-            print(f"⚠️ Score {quality_score} below threshold {min_score}. Skipping storage.")
+            print(
+                f"⚠️ Score {quality_score} below threshold {min_score}. Skipping storage."
+            )
             return
         try:
             text = f"Task: {task_description}\nResult: {result}"
             embedding = self.embedder.embed_documents([text])[0]
-            
+
             self.collection.add(
                 documents=[result],
-                metadatas=[{
-                    "task_id": task_id,
-                    "task_description": task_description[:500],
-                    "quality_score": quality_score,
-                    "iterations": iterations,
-                    "stored_at": datetime.now().isoformat(),
-                }],
+                metadatas=[
+                    {
+                        "task_id": task_id,
+                        "task_description": task_description[:500],
+                        "quality_score": quality_score,
+                        "iterations": iterations,
+                        "stored_at": datetime.now().isoformat(),
+                    }
+                ],
                 ids=[task_id],
-                embeddings=[embedding]
+                embeddings=[embedding],
             )
             print(f"💾 Stored lesson (score: {quality_score}/10)")
         except Exception as e:
             print(f"❌ Failed to store result: {e}")
-    
-    def query_similar(
-        self,
-        query: str,
-        n_results: int = 3
-    ) -> List[Dict]:
+
+    def query_similar(self, query: str, n_results: int = 3) -> List[Dict]:
         """Return top-n similar past results as dicts (alias for get_relevant_lessons)."""
         lessons = self.get_relevant_lessons(query, n_results)
         return [{"lesson": lesson} for lesson in lessons]
-    
+
     def get_memory_stats(self) -> Dict[str, int]:
         """Return count of stored items and collection size."""
         stats = self.get_stats()
@@ -713,13 +872,14 @@ class MemoryManager:
 # AGENT FACTORY
 # ============================================================================
 
+
 class AgentFactory:
     """Create and manage agents"""
-    
-    def __init__(self, llm: ChatOllama, config: Dict[str, Any]):
+
+    def __init__(self, llm: LLMProvider, config: Dict[str, Any]):
         self.llm = llm
-        self.config = config['agents']
-    
+        self.config = config["agents"]
+
     def create_planner(self) -> Agent:
         """Create planner agent - Strategic Engineering Lead"""
         return Agent(
@@ -733,19 +893,19 @@ class AgentFactory:
                 "Output format: numbered tasks, each with input, output, and acceptance criteria."
             ),
             llm=self.llm,
-            verbose=self.config['verbose'],
-            allow_delegation=self.config['allow_delegation']
+            verbose=self.config["verbose"],
+            allow_delegation=self.config["allow_delegation"],
         )
-    
+
     def create_researcher(self, enable_web_search: bool = False) -> Agent:
         """Create researcher agent - Principal Technical Researcher"""
         tools = []
-        if enable_web_search:
+        if enable_web_search and SERPER_AVAILABLE:
             try:
                 tools.append(SerperDevTool())
             except Exception:
-                st.warning("Web search tool not configured (SERPER_API_KEY missing)")
-        
+                pass
+
         return Agent(
             role="Principal Technical Researcher",
             goal="Produce a concise, high-signal research brief covering the best implementation patterns, known pitfalls, and idiomatic approaches for the task.",
@@ -757,10 +917,10 @@ class AgentFactory:
             ),
             tools=tools,
             llm=self.llm,
-            verbose=self.config['verbose'],
-            allow_delegation=self.config['allow_delegation']
+            verbose=self.config["verbose"],
+            allow_delegation=self.config["allow_delegation"],
         )
-    
+
     def create_coder(self) -> Agent:
         """Create coder agent - Senior Software Craftsperson"""
         return Agent(
@@ -773,10 +933,10 @@ class AgentFactory:
                 "boring > exciting. Will refuse to ship code that 'works but is embarrassing.'"
             ),
             llm=self.llm,
-            verbose=self.config['verbose'],
-            allow_delegation=self.config['allow_delegation']
+            verbose=self.config["verbose"],
+            allow_delegation=self.config["allow_delegation"],
         )
-    
+
     def create_tester(self) -> Agent:
         """Create tester agent - Adversarial QA Engineer"""
         return Agent(
@@ -791,10 +951,10 @@ class AgentFactory:
                 "Uses pytest. Aims for 80%+ coverage. Names tests like documentation."
             ),
             llm=self.llm,
-            verbose=self.config['verbose'],
-            allow_delegation=self.config['allow_delegation']
+            verbose=self.config["verbose"],
+            allow_delegation=self.config["allow_delegation"],
         )
-    
+
     def create_critic(self) -> Agent:
         """Create critic agent - Principal Engineer & Gatekeeper"""
         return Agent(
@@ -814,10 +974,10 @@ class AgentFactory:
                 "REQUIRED CHANGES: [only if REVISION REQUIRED]"
             ),
             llm=self.llm,
-            verbose=self.config['verbose'],
-            allow_delegation=self.config['allow_delegation']
+            verbose=self.config["verbose"],
+            allow_delegation=self.config["allow_delegation"],
         )
-    
+
     def create_all(self) -> Dict[str, Agent]:
         """Create all agents, return as named dict."""
         return {
@@ -832,6 +992,7 @@ class AgentFactory:
 # ============================================================================
 # CRITIC PARSER
 # ============================================================================
+
 
 class CriticParser:
     """Parses structured Critic agent output into typed fields."""
@@ -881,14 +1042,21 @@ class CriticParser:
 # TASK FACTORY
 # ============================================================================
 
+
 class TaskFactory:
     """Create and manage tasks"""
-    
+
     @staticmethod
-    def create_plan_task(user_query: str, past_lessons: List[str], agent: Agent) -> Task:
+    def create_plan_task(
+        user_query: str, past_lessons: List[str], agent: Agent
+    ) -> Task:
         """Create planning task"""
-        lessons_str = "\n".join(past_lessons) if past_lessons else "No previous lessons available."
-        
+        lessons_str = (
+            "\n".join(past_lessons)
+            if past_lessons
+            else "No previous lessons available."
+        )
+
         return Task(
             description=(
                 f"Create a detailed step-by-step plan for the following request:\n\n"
@@ -903,9 +1071,9 @@ class TaskFactory:
                 f"Output format: Numbered plan with clear agent assignments and rationale."
             ),
             expected_output="Detailed numbered plan with agent assignments and dependencies",
-            agent=agent
+            agent=agent,
         )
-    
+
     @staticmethod
     def create_research_task(plan: str, agent: Agent) -> Task:
         """Create research task"""
@@ -920,9 +1088,9 @@ class TaskFactory:
                 f"If no research is needed, state: 'No research needed - sufficient context available'\n"
             ),
             expected_output="Research findings summary or 'No research needed'",
-            agent=agent
+            agent=agent,
         )
-    
+
     @staticmethod
     def create_code_task(plan: str, research: str, agent: Agent) -> Task:
         """Create coding task"""
@@ -943,9 +1111,9 @@ class TaskFactory:
                 f"- Any assumptions made\n"
             ),
             expected_output="Complete code implementation with explanation",
-            agent=agent
+            agent=agent,
         )
-    
+
     @staticmethod
     def create_test_task(code: str, agent: Agent) -> Task:
         """Create testing task"""
@@ -964,9 +1132,9 @@ class TaskFactory:
                 f"- Any additional testing recommendations\n"
             ),
             expected_output="Test code and testing recommendations",
-            agent=agent
+            agent=agent,
         )
-    
+
     @staticmethod
     def create_critic_task(all_outputs: str, agent: Agent) -> Task:
         """Create critic/review task"""
@@ -989,7 +1157,7 @@ class TaskFactory:
                 f"Be thorough but fair. Focus on actionable feedback."
             ),
             expected_output="Structured critic report with score and specific feedback",
-            agent=agent
+            agent=agent,
         )
 
 
@@ -997,83 +1165,87 @@ class TaskFactory:
 # SWARM ORCHESTRATOR
 # ============================================================================
 
+
 class SwarmOrchestrator:
     """Orchestrate the multi-agent workflow"""
-    
+
     def __init__(
         self,
         llm_manager: LLMManager,
         memory_manager: MemoryManager,
-        config: Dict[str, Any]
+        config: Dict[str, Any],
     ):
         self.llm_manager = llm_manager
         self.memory = memory_manager
         self.config = config
         self.agent_factory = AgentFactory(llm_manager.llm, config)
-        
+
     def execute(
-        self,
-        user_query: str,
-        enable_web_search: bool = False,
-        max_iterations: int = 3
+        self, user_query: str, enable_web_search: bool = False, max_iterations: int = 3
     ) -> Dict[str, Any]:
         """Execute the swarm workflow"""
-        
+
         # Create agents
         planner = self.agent_factory.create_planner()
         researcher = self.agent_factory.create_researcher(enable_web_search)
         coder = self.agent_factory.create_coder()
         tester = self.agent_factory.create_tester()
         critic = self.agent_factory.create_critic()
-        
+
         best_result = None
         best_score = 0
-        
+
         for iteration in range(max_iterations):
             try:
                 st.info(f"🔄 Iteration {iteration + 1}/{max_iterations}")
-                
+
                 # Get relevant lessons
                 past_lessons = self.memory.get_relevant_lessons(user_query)
-                
+
                 # Create tasks
-                plan_task = TaskFactory.create_plan_task(user_query, past_lessons, planner)
-                
+                plan_task = TaskFactory.create_plan_task(
+                    user_query, past_lessons, planner
+                )
+
                 # Execute planning first
                 st.write("📋 Planning...")
                 plan_crew = Crew(
                     agents=[planner],
                     tasks=[plan_task],
                     process=Process.sequential,
-                    verbose=False
+                    verbose=False,
                 )
                 plan_result = plan_crew.kickoff()
                 plan_output = str(plan_result)
-                
+
                 # Research
                 st.write("🔍 Researching...")
-                research_task = TaskFactory.create_research_task(plan_output, researcher)
+                research_task = TaskFactory.create_research_task(
+                    plan_output, researcher
+                )
                 research_crew = Crew(
                     agents=[researcher],
                     tasks=[research_task],
                     process=Process.sequential,
-                    verbose=False
+                    verbose=False,
                 )
                 research_result = research_crew.kickoff()
                 research_output = str(research_result)
-                
+
                 # Code
                 st.write("💻 Coding...")
-                code_task = TaskFactory.create_code_task(plan_output, research_output, coder)
+                code_task = TaskFactory.create_code_task(
+                    plan_output, research_output, coder
+                )
                 code_crew = Crew(
                     agents=[coder],
                     tasks=[code_task],
                     process=Process.sequential,
-                    verbose=False
+                    verbose=False,
                 )
                 code_result = code_crew.kickoff()
                 code_output = str(code_result)
-                
+
                 # Test
                 st.write("🧪 Testing...")
                 test_task = TaskFactory.create_test_task(code_output, tester)
@@ -1081,11 +1253,11 @@ class SwarmOrchestrator:
                     agents=[tester],
                     tasks=[test_task],
                     process=Process.sequential,
-                    verbose=False
+                    verbose=False,
                 )
                 test_result = test_crew.kickoff()
                 test_output = str(test_result)
-                
+
                 # Critic review
                 st.write("⚖️ Reviewing...")
                 all_outputs = f"PLAN:\n{plan_output}\n\nRESEARCH:\n{research_output}\n\nCODE:\n{code_output}\n\nTESTS:\n{test_output}"
@@ -1094,65 +1266,63 @@ class SwarmOrchestrator:
                     agents=[critic],
                     tasks=[critic_task],
                     process=Process.sequential,
-                    verbose=False
+                    verbose=False,
                 )
                 critic_result = critic_crew.kickoff()
                 critic_output = str(critic_result)
-                
+
                 # Extract score
                 score = self._extract_score(critic_output)
-                
+
                 # Save to memory
                 self.memory.save_lesson(user_query, all_outputs, critic_output, score)
-                
+
                 # Track best result
                 if score > best_score:
                     best_score = score
                     best_result = {
-                        'plan': plan_output,
-                        'research': research_output,
-                        'code': code_output,
-                        'tests': test_output,
-                        'critique': critic_output,
-                        'score': score,
-                        'iteration': iteration + 1
+                        "plan": plan_output,
+                        "research": research_output,
+                        "code": code_output,
+                        "tests": test_output,
+                        "critique": critic_output,
+                        "score": score,
+                        "iteration": iteration + 1,
                     }
-                
+
                 # Check if we should stop
                 if score >= 8:
                     st.success(f"✅ High quality output achieved (Score: {score}/10)")
                     break
                 elif iteration < max_iterations - 1:
                     st.warning(f"⚠️ Score: {score}/10. Retrying with feedback...")
-                
+
             except Exception as e:
                 st.error(f"Error in iteration {iteration + 1}: {str(e)}")
                 if best_result is None and iteration == max_iterations - 1:
                     raise
-        
-        return best_result or {
-            'error': 'All iterations failed',
-            'score': 0
-        }
-    
+
+        return best_result or {"error": "All iterations failed", "score": 0}
+
     def _extract_score(self, critic_output: str) -> float:
         """Extract numeric score from critic output"""
         try:
             # Look for patterns like "Score: 8/10" or "8/10" or "SCORE: 8"
             import re
+
             patterns = [
-                r'score[:\s]+(\d+(?:\.\d+)?)\s*/\s*10',
-                r'(\d+(?:\.\d+)?)\s*/\s*10',
-                r'score[:\s]+(\d+(?:\.\d+)?)'
+                r"score[:\s]+(\d+(?:\.\d+)?)\s*/\s*10",
+                r"(\d+(?:\.\d+)?)\s*/\s*10",
+                r"score[:\s]+(\d+(?:\.\d+)?)",
             ]
-            
+
             for pattern in patterns:
                 match = re.search(pattern, critic_output.lower())
                 if match:
                     return float(match.group(1))
-            
+
             return 5.0  # Default mid-score if not found
-            
+
         except Exception:
             return 5.0
 
@@ -1160,6 +1330,7 @@ class SwarmOrchestrator:
 # ============================================================================
 # TASK ORCHESTRATOR
 # ============================================================================
+
 
 class TaskOrchestrator:
     """Orchestrates task creation and crew execution with retry loop."""
@@ -1171,7 +1342,7 @@ class TaskOrchestrator:
     def build_tasks(self, user_request: str, context: str = "") -> List[Task]:
         """Create ordered task list from user request."""
         tasks = []
-        
+
         # Planning task
         plan_task = Task(
             description=(
@@ -1180,7 +1351,7 @@ class TaskOrchestrator:
                 f"Output format: numbered tasks, each with input, output, and acceptance criteria."
             ),
             expected_output="Numbered plan with acceptance criteria",
-            agent=self.agents["planner"]
+            agent=self.agents["planner"],
         )
         tasks.append(plan_task)
 
@@ -1191,7 +1362,7 @@ class TaskOrchestrator:
                 f"Include: recommended approach, alternatives, top 3 gotchas, one non-obvious insight."
             ),
             expected_output="Research brief with patterns and pitfalls",
-            agent=self.agents["researcher"]
+            agent=self.agents["researcher"],
         )
         tasks.append(research_task)
 
@@ -1202,7 +1373,7 @@ class TaskOrchestrator:
                 f"No placeholders. No TODOs. No magic numbers. Use type hints."
             ),
             expected_output="Complete runnable code",
-            agent=self.agents["coder"]
+            agent=self.agents["coder"],
         )
         tasks.append(code_task)
 
@@ -1213,7 +1384,7 @@ class TaskOrchestrator:
                 f"Include edge cases: None, empty strings, huge numbers, unicode."
             ),
             expected_output="Complete test suite",
-            agent=self.agents["tester"]
+            agent=self.agents["tester"],
         )
         tasks.append(test_task)
 
@@ -1228,7 +1399,7 @@ class TaskOrchestrator:
                 f"REQUIRED CHANGES: [if REVISION REQUIRED]"
             ),
             expected_output="SCORE, VERDICT, ISSUES, REQUIRED CHANGES",
-            agent=self.agents["critic"]
+            agent=self.agents["critic"],
         )
         tasks.append(critic_task)
 
@@ -1262,16 +1433,31 @@ class TaskOrchestrator:
                 verbose=True,
             )
 
-            result = crew.kickoff()
-            critic_data = CriticParser.parse(str(result))
-            agent_log.append(f"📊 Critic score: {critic_data['score']}/10")
+            try:
+                result = crew.kickoff()
+                critic_data = CriticParser.parse(str(result))
+                agent_log.append(f"📊 Critic score: {critic_data['score']}/10")
 
-            last_result = {
-                "final_code": str(result),
-                "critic_result": critic_data,
-                "iterations": iteration,
-                "agent_log": "\n".join(agent_log),
-            }
+                last_result = {
+                    "final_code": str(result),
+                    "critic_result": critic_data,
+                    "iterations": iteration,
+                    "agent_log": "\n".join(agent_log),
+                }
+            except Exception as e:
+                agent_log.append(f"❌ Error: {str(e)}")
+                last_result = {
+                    "final_code": "",
+                    "critic_result": {
+                        "score": 0,
+                        "verdict": "ERROR",
+                        "approved": False,
+                        "issues": [str(e)],
+                    },
+                    "iterations": iteration,
+                    "agent_log": "\n".join(agent_log),
+                }
+                break
 
             if critic_data["approved"] or critic_data["score"] >= quality_threshold:
                 agent_log.append(f"✅ Approved at iteration {iteration}")
@@ -1292,31 +1478,32 @@ class TaskOrchestrator:
 # SETUP WIZARD
 # ============================================================================
 
+
 def setup_wizard():
     """First-time setup wizard"""
     st.title("🛠️ Forge Swarm Setup Wizard")
-    
+
     st.write("Let's check your system and get everything ready...")
-    
+
     # Check Ollama
     with st.spinner("Checking Ollama..."):
         ollama_ok, ollama_msg = SystemChecker.check_ollama()
-    
+
     if ollama_ok:
         st.success(f"✅ {ollama_msg}")
     else:
         st.error(f"❌ {ollama_msg}")
         st.code("# Start Ollama with:\nollama serve")
         return False
-    
+
     # Check models
     config = Config.load()
-    llm_model = config['llm']['model']
-    emb_model = config['embeddings']['model']
-    
+    llm_model = config["llm"]["model"]
+    emb_model = config["embeddings"]["model"]
+
     with st.spinner(f"Checking model: {llm_model}..."):
         llm_ok, llm_msg = SystemChecker.check_model(llm_model)
-    
+
     if llm_ok:
         st.success(f"✅ {llm_msg}")
     else:
@@ -1324,16 +1511,16 @@ def setup_wizard():
         if st.button(f"Pull {llm_model} now (this may take a while)"):
             with st.spinner("Downloading model..."):
                 try:
-                    subprocess.run(['ollama', 'pull', llm_model], check=True)
+                    subprocess.run(["ollama", "pull", llm_model], check=True)
                     st.success("Model downloaded!")
                     st.rerun()
                 except Exception:
                     st.error("Failed to download model. Please run manually.")
         return False
-    
+
     with st.spinner(f"Checking embeddings model: {emb_model}..."):
         emb_ok, emb_msg = SystemChecker.check_model(emb_model)
-    
+
     if emb_ok:
         st.success(f"✅ {emb_msg}")
     else:
@@ -1341,13 +1528,13 @@ def setup_wizard():
         if st.button(f"Pull {emb_model} now"):
             with st.spinner("Downloading embeddings model..."):
                 try:
-                    subprocess.run(['ollama', 'pull', emb_model], check=True)
+                    subprocess.run(["ollama", "pull", emb_model], check=True)
                     st.success("Embeddings model downloaded!")
                     st.rerun()
                 except Exception:
                     st.error("Failed to download model. Please run manually.")
         return False
-    
+
     # Test LLM connection
     with st.spinner("Testing LLM connection..."):
         try:
@@ -1361,19 +1548,20 @@ def setup_wizard():
         except Exception as e:
             st.error(f"❌ LLM test failed: {e}")
             return False
-    
+
     st.success("🎉 All systems ready! Click 'Continue to App' below.")
-    
+
     if st.button("Continue to App", type="primary"):
         st.session_state.setup_complete = True
         st.rerun()
-    
+
     return True
 
 
 # ============================================================================
 # CODE SANDBOX
 # ============================================================================
+
 
 class CodeSandbox:
     """Safe, restricted Python code execution using RestrictedPython."""
@@ -1386,7 +1574,12 @@ class CodeSandbox:
     def execute(self, code: str) -> Dict[str, Any]:
         """Execute a Python code snippet safely."""
         if not self.enabled:
-            return {"output": "", "error": "Sandbox disabled in config", "success": False, "truncated": False}
+            return {
+                "output": "",
+                "error": "Sandbox disabled in config",
+                "success": False,
+                "truncated": False,
+            }
 
         import io
         import contextlib
@@ -1401,7 +1594,7 @@ class CodeSandbox:
                 exec(byte_code, restricted_globals)  # noqa: S102
             lines = output_buffer.getvalue().split("\n")
             if len(lines) > self.max_lines:
-                lines = lines[:self.max_lines]
+                lines = lines[: self.max_lines]
                 result["truncated"] = True
             result["output"] = "\n".join(lines)
             result["success"] = True
@@ -1414,8 +1607,12 @@ class CodeSandbox:
     def render_ui(self, code: str) -> None:
         """Render sandbox execution UI in Streamlit."""
         st.markdown("### 🧪 Code Sandbox")
-        st.caption("⚠️ Restricted execution — safe imports only. No filesystem or network access.")
-        editable = st.text_area("Edit before running", value=code, height=300, key="sandbox_code")
+        st.caption(
+            "⚠️ Restricted execution — safe imports only. No filesystem or network access."
+        )
+        editable = st.text_area(
+            "Edit before running", value=code, height=300, key="sandbox_code"
+        )
         if st.button("▶️ Run Code", type="primary"):
             with st.spinner("Executing..."):
                 result = self.execute(editable)
@@ -1435,6 +1632,7 @@ class CodeSandbox:
 # FILE UPLOAD HANDLER
 # ============================================================================
 
+
 class FileUploadHandler:
     """Handles file uploads for context injection into agent runs."""
 
@@ -1453,7 +1651,9 @@ class FileUploadHandler:
             return None
         size_kb = uploaded.size / 1024
         if size_kb > FileUploadHandler.MAX_FILE_SIZE_KB:
-            st.error(f"❌ File too large ({size_kb:.0f}KB). Max {FileUploadHandler.MAX_FILE_SIZE_KB}KB.")
+            st.error(
+                f"❌ File too large ({size_kb:.0f}KB). Max {FileUploadHandler.MAX_FILE_SIZE_KB}KB."
+            )
             return None
         try:
             contents = uploaded.read().decode("utf-8")
@@ -1469,6 +1669,7 @@ class FileUploadHandler:
 # ============================================================================
 # MAIN UI
 # ============================================================================
+
 
 def main() -> None:
     """Main application"""
@@ -1496,7 +1697,9 @@ def main() -> None:
     if "memory_manager" not in st.session_state:
         try:
             llm_manager = LLMManager(config)
-            st.session_state.memory_manager = MemoryManager(config, llm_manager.embedder)
+            st.session_state.memory_manager = MemoryManager(
+                config, llm_manager.embedder
+            )
         except Exception:
             st.session_state.memory_manager = None
 
@@ -1514,21 +1717,126 @@ def main() -> None:
 
         st.markdown("---")
 
+        # Provider selector
+        st.markdown("### 🤖 Provider")
+        llm_config = config["llm"]
+        current_provider = llm_config.get("provider", "ollama")
+        provider = st.selectbox(
+            "Select AI Provider",
+            options=["ollama", "nvidia_nim"],
+            index=0 if current_provider == "ollama" else 1,
+            help="Choose between local Ollama or NVIDIA NIM API",
+        )
+
+        # Update config if provider changed
+        if provider != current_provider:
+            config["llm"]["provider"] = provider
+            st.rerun()
+
+        # Show API key input for NVIDIA NIM
+        if provider == "nvidia_nim":
+            nim_config = config["nvidia_nim"]
+            api_key = st.text_input(
+                "NVIDIA NIM API Key",
+                value=nim_config.get("api_key", ""),
+                type="password",
+                help="Get from build.nvidia.com",
+            )
+            if api_key:
+                config["nvidia_nim"]["api_key"] = api_key
+                os.environ["NIM_API_KEY"] = api_key
+
+        st.markdown("---")
         # Model selector
         st.markdown("### ⚙️ Model")
-        model = st.text_input("Ollama model", value=config["llm"]["model"])
+
+        if provider == "ollama":
+            available_models = SystemChecker.get_available_models()
+            if available_models:
+                current_model = config["llm"]["model"]
+                if current_model not in available_models:
+                    current_model = available_models[0]
+                model = st.selectbox(
+                    "Select model",
+                    options=available_models,
+                    index=available_models.index(current_model)
+                    if current_model in available_models
+                    else 0,
+                    help="Choose an LLM model from available Ollama models",
+                )
+            else:
+                model = st.text_input(
+                    "Ollama model",
+                    value=config["llm"]["model"],
+                    help="Enter model name manually",
+                )
+                if not model:
+                    model = "qwen2.5:3b"
+        elif provider == "nvidia_nim":
+            # Get models from config
+            nim_models_config = config.get("nvidia_nim", {}).get("models", [])
+            
+            # Format dropdown options with metadata
+            nim_model_options = []
+            nim_model_ids = []
+            
+            for model_data in nim_models_config:
+                model_id = model_data.get("id", "")
+                model_name = model_data.get("name", model_id)
+                context = model_data.get("context", "N/A")
+                parameters = model_data.get("parameters", "N/A")
+                specialty = model_data.get("specialty", "general")
+                
+                # Format: "Model Name (Context: X, Parameters: Y) - Specialty"
+                display_name = f"{model_name} (Context: {context}, Parameters: {parameters}) - {specialty}"
+                nim_model_options.append(display_name)
+                nim_model_ids.append(model_id)
+            
+            # Fallback to hardcoded list if no models in config
+            if not nim_model_options:
+                nim_model_ids = [
+                    "meta/llama-3.1-8b-instruct",
+                    "meta/llama-3.1-70b-instruct",
+                    "meta/llama-3.1-405b-instruct",
+                    "mistralai/mistral-7b-instruct-v0.3",
+                    "mistralai/mixtral-8x7b-instruct-v0.1",
+                    "google/gemma-2-9b-it",
+                    "google/gemma-2-27b-it",
+                ]
+                nim_model_options = nim_model_ids
+            
+            current_model = config["nvidia_nim"]["model"]
+            
+            # Find current model index
+            try:
+                current_index = nim_model_ids.index(current_model)
+            except ValueError:
+                current_index = 0
+            
+            selected_option = st.selectbox(
+                "Select NVIDIA NIM Model",
+                options=nim_model_options,
+                index=current_index,
+                help="Choose from available NVIDIA NIM models",
+            )
+            
+            # Get the model ID from the selected option
+            selected_index = nim_model_options.index(selected_option)
+            model = nim_model_ids[selected_index]
+            
+            # Update config
+            config["nvidia_nim"]["model"] = model
 
         st.markdown("---")
 
         # Memory stats + controls
-        st.markdown("### 🧠 Memory")
         memory_manager = st.session_state.memory_manager
         if memory_manager:
             stats = memory_manager.get_memory_stats()
             st.metric("Lessons stored", stats.get("items_stored", 0))
         else:
             st.metric("Lessons stored", 0)
-        
+
         col1, col2 = st.columns(2)
         with col1:
             if st.button("📤 Export", use_container_width=True):
@@ -1617,11 +1925,25 @@ def main() -> None:
 
     # ── EXECUTION ─────────────────────────────────────────────
     if submit and user_request.strip():
-        llm = ChatOllama(
-            model=model,
-            base_url=config["llm"]["base_url"],
-            temperature=config["llm"]["temperature"],
-        )
+        # Initialize LLM based on provider
+        if provider == "ollama":
+            llm = LLMProvider(
+                provider="ollama",
+                model=model,
+                base_url=config["llm"]["base_url"],
+                temperature=config["llm"]["temperature"],
+                num_ctx=config["llm"]["num_ctx"],
+            )
+        else:  # nvidia_nim
+            llm = LLMProvider(
+                provider="nvidia_nim",
+                model=model,
+                base_url="https://integrate.api.nvidia.com/v1",
+                temperature=config["nvidia_nim"].get("temperature", config["llm"]["temperature"]),
+                num_ctx=config["nvidia_nim"].get("max_tokens", 8192),
+                api_key=config["nvidia_nim"].get("api_key", ""),
+            )
+
         factory = AgentFactory(llm=llm, config=config)
         orchestrator = TaskOrchestrator(agents=factory.create_all(), config=config)
 
@@ -1631,7 +1953,7 @@ def main() -> None:
 
             critic = result.get("critic_result", {})
             score = critic.get("score", 0)
-            
+
             if memory_manager:
                 memory_manager.store_result(
                     task_id=f"task_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
@@ -1641,11 +1963,13 @@ def main() -> None:
                     iterations=result.get("iterations", 1),
                 )
 
-            st.session_state.run_history.append({
-                "request": user_request[:60] + "...",
-                "score": score,
-                "iterations": result.get("iterations", 1),
-            })
+            st.session_state.run_history.append(
+                {
+                    "request": user_request[:60] + "...",
+                    "score": score,
+                    "iterations": result.get("iterations", 1),
+                }
+            )
             status.update(label="✅ Complete!", state="complete")
 
     # ── RESULTS ───────────────────────────────────────────────
@@ -1653,7 +1977,9 @@ def main() -> None:
         result = st.session_state.last_result
         critic = result.get("critic_result", {})
 
-        AgentStatusDisplay.render_score(critic.get("score", 0), critic.get("verdict", "UNKNOWN"))
+        AgentStatusDisplay.render_score(
+            critic.get("score", 0), critic.get("verdict", "UNKNOWN")
+        )
         st.caption(f"Completed in {result.get('iterations', 1)} iteration(s)")
 
         tab1, tab2, tab3, tab4 = st.tabs(
@@ -1674,7 +2000,9 @@ def main() -> None:
         with tab3:
             memory_manager = st.session_state.memory_manager
             if memory_manager and st.session_state.run_history:
-                similar = memory_manager.query_similar(st.session_state.run_history[-1]["request"])
+                similar = memory_manager.query_similar(
+                    st.session_state.run_history[-1]["request"]
+                )
                 if similar:
                     for item in similar:
                         with st.expander(f"📚 {item.get('task', 'Past task')[:60]}"):
