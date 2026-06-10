@@ -1704,52 +1704,50 @@ def main() -> None:
             st.session_state.memory_manager = None
 
     # ── SIDEBAR ──────────────────────────────────────────────
+    # ── SIDEBAR (Command Deck) ──────────────────────────────
     with st.sidebar:
-        st.markdown("## ⚡ Forge Swarm")
-        st.caption("Local multi-agent code generation")
-        st.markdown("---")
-
-        # System status
-        st.markdown("### 🖥️ System Status")
+        # Compact Brand Header
+        st.markdown("""
+        <div style="margin-bottom: 24px;">
+            <div style="font-family: 'Space Grotesk', sans-serif; font-size: 14px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;">
+                FORGE_SWARM
+            </div>
+            <div style="font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(255,255,255,0.4); letter-spacing: 0.1em; text-transform: uppercase;">
+                v3.0 // Local Multi-Agent AI
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # System Status - Compact Row
         checks = SystemChecker.run_all_checks(config)
+        st.markdown("### SYS_STATUS", help="System health indicators")
+        
+        status_html = "<div style='display: flex; gap: 8px; margin-bottom: 20px;'>"
         for name, (passed, _) in checks.items():
-            st.markdown(f"{'✅' if passed else '❌'} **{name}**")
-
-        st.markdown("---")
-
-        # Provider selector
-        st.markdown("### 🤖 Provider")
+            icon = "●" if passed else "○"
+            color = "#00ff41" if passed else "#ff00ff"
+            status_html += f"<span title='{name}' style='color: {color}; font-size: 14px;'>{icon}</span>"
+        status_html += "</div>"
+        st.markdown(status_html, unsafe_allow_html=True)
+        
+        # Model / Provider - Compact
+        st.markdown("### CONFIG", help="AI Model settings")
         llm_config = config["llm"]
         current_provider = llm_config.get("provider", "ollama")
+        
+        # Provider toggle
         provider = st.selectbox(
-            "Select AI Provider",
+            "Provider",
             options=["ollama", "nvidia_nim"],
             index=0 if current_provider == "ollama" else 1,
-            help="Choose between local Ollama or NVIDIA NIM API",
+            label_visibility="collapsed",
         )
-
-        # Update config if provider changed
+        
         if provider != current_provider:
             config["llm"]["provider"] = provider
             st.rerun()
-
-        # Show API key input for NVIDIA NIM
-        if provider == "nvidia_nim":
-            nim_config = config["nvidia_nim"]
-            api_key = st.text_input(
-                "NVIDIA NIM API Key",
-                value=nim_config.get("api_key", ""),
-                type="password",
-                help="Get from build.nvidia.com",
-            )
-            if api_key:
-                config["nvidia_nim"]["api_key"] = api_key
-                os.environ["NIM_API_KEY"] = api_key
-
-        st.markdown("---")
+        
         # Model selector
-        st.markdown("### ⚙️ Model")
-
         if provider == "ollama":
             available_models = SystemChecker.get_available_models()
             if available_models:
@@ -1757,86 +1755,84 @@ def main() -> None:
                 if current_model not in available_models:
                     current_model = available_models[0]
                 model = st.selectbox(
-                    "Select model",
+                    "Model",
                     options=available_models,
-                    index=available_models.index(current_model)
-                    if current_model in available_models
-                    else 0,
-                    help="Choose an LLM model from available Ollama models",
+                    index=available_models.index(current_model) if current_model in available_models else 0,
+                    label_visibility="collapsed",
                 )
             else:
-                model = st.text_input(
-                    "Ollama model",
-                    value=config["llm"]["model"],
-                    help="Enter model name manually",
-                )
+                model = st.text_input("Model", value=config["llm"]["model"], label_visibility="collapsed")
                 if not model:
                     model = "qwen2.5:3b"
         elif provider == "nvidia_nim":
-            # Get models from config
             nim_models_config = config.get("nvidia_nim", {}).get("models", [])
-            
-            # Format dropdown options with metadata
             nim_model_options = []
             nim_model_ids = []
             
             for model_data in nim_models_config:
                 model_id = model_data.get("id", "")
                 model_name = model_data.get("name", model_id)
-                context = model_data.get("context", "N/A")
-                parameters = model_data.get("parameters", "N/A")
-                specialty = model_data.get("specialty", "general")
-                
-                # Format: "Model Name (Context: X, Parameters: Y) - Specialty"
-                display_name = f"{model_name} (Context: {context}, Parameters: {parameters}) - {specialty}"
-                nim_model_options.append(display_name)
+                nim_model_options.append(model_name)
                 nim_model_ids.append(model_id)
             
-            # Fallback to hardcoded list if no models in config
             if not nim_model_options:
                 nim_model_ids = [
                     "meta/llama-3.1-8b-instruct",
                     "meta/llama-3.1-70b-instruct",
-                    "meta/llama-3.1-405b-instruct",
                     "mistralai/mistral-7b-instruct-v0.3",
-                    "mistralai/mixtral-8x7b-instruct-v0.1",
-                    "google/gemma-2-9b-it",
-                    "google/gemma-2-27b-it",
                 ]
                 nim_model_options = nim_model_ids
             
             current_model = config["nvidia_nim"]["model"]
-            
-            # Find current model index
             try:
                 current_index = nim_model_ids.index(current_model)
             except ValueError:
                 current_index = 0
             
             selected_option = st.selectbox(
-                "Select NVIDIA NIM Model",
+                "Model",
                 options=nim_model_options,
                 index=current_index,
-                help="Choose from available NVIDIA NIM models",
+                label_visibility="collapsed",
             )
-            
-            # Get the model ID from the selected option
-            selected_index = nim_model_options.index(selected_option)
-            model = nim_model_ids[selected_index]
-            
-            # Update config
+            model = nim_model_ids[nim_model_options.index(selected_option)]
             config["nvidia_nim"]["model"] = model
+            
+            # NIM API Key
+            nim_config = config["nvidia_nim"]
+            api_key = st.text_input(
+                "API Key",
+                value=nim_config.get("api_key", ""),
+                type="password",
+                label_visibility="collapsed",
+            )
+            if api_key:
+                config["nvidia_nim"]["api_key"] = api_key
+                os.environ["NIM_API_KEY"] = api_key
 
         st.markdown("---")
-
-        # Memory stats + controls
+        
+        # Memory - Compact Card
         memory_manager = st.session_state.memory_manager
         if memory_manager:
             stats = memory_manager.get_memory_stats()
-            st.metric("Lessons stored", stats.get("items_stored", 0))
+            count = stats.get("items_stored", 0)
         else:
-            st.metric("Lessons stored", 0)
-
+            count = 0
+        
+        st.markdown(f"""
+        <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 4px; padding: 12px; margin-bottom: 16px;">
+            <div style="font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(255,255,255,0.4); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 4px;">
+                VECTOR_MEMORY
+            </div>
+            <div style="font-family: 'Space Grotesk', sans-serif; font-size: 24px; font-weight: 700; color: #00f3ff;">
+                {count}
+                <span style="font-size: 11px; color: rgba(255,255,255,0.4); font-weight: 400;">lessons</span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Memory Actions - Compact
         col1, col2 = st.columns(2)
         with col1:
             if st.button("📤 Export", use_container_width=True):
@@ -1857,27 +1853,29 @@ def main() -> None:
                     st.rerun()
                 else:
                     st.session_state.confirm_clear = True
-                    st.warning("Click again")
-
-        # Memory browser
-        st.markdown("---")
-        st.markdown("### 🔍 Search Memory")
-        search_query = st.text_input("Search lessons", placeholder="e.g. FastAPI")
+                    st.warning("Click again to confirm")
+        
+        # Memory Search - Compact
+        search_query = st.text_input("Search memory", placeholder="e.g. FastAPI", label_visibility="collapsed")
         if search_query and memory_manager:
             results = memory_manager.search_memory(search_query, n_results=5)
             if results:
                 for r in results:
-                    dot = "🟢" if r["score"] >= 8 else "🟡" if r["score"] >= 6 else "🔴"
-                    with st.expander(f"{dot} {r['task'][:35]}..."):
-                        st.caption(f"Score: {r['score']}/10 · {r['stored_at'][:10]}")
-                        st.text(r["result"][:250] + "...")
+                    dot = "●" if r["score"] >= 8 else "●" if r["score"] >= 6 else "●"
+                    color = "#00ff41" if r["score"] >= 8 else "#f0ff00" if r["score"] >= 6 else "#ff00ff"
+                    st.markdown(f"""
+                    <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 4px; padding: 8px; margin-bottom: 4px; border-left: 2px solid {color};">
+                        <div style="font-size: 11px; color: #e0e0e0; margin-bottom: 2px;">{r['task'][:40]}...</div>
+                        <div style="font-family: 'JetBrains Mono', monospace; font-size: 9px; color: {color};">Score: {r['score']}/10</div>
+                    </div>
+                    """, unsafe_allow_html=True)
             else:
-                st.caption("No matching lessons.")
-
+                st.caption("No matches found")
+        
         st.markdown("---")
-
-        # Templates
-        st.markdown("### 📋 Templates")
+        
+        # Templates - Compact Grid
+        st.markdown("### TEMPLATES", help="Quick-start task templates")
         TEMPLATES = {
             "⚡ FastAPI CRUD": "templates/fastapi_crud.md",
             "📊 Data Pipeline": "templates/data_pipeline.md",
@@ -1885,14 +1883,20 @@ def main() -> None:
             "🕷️ Web Scraper": "templates/web_scraper.md",
             "🖥️ CLI Tool": "templates/cli_tool.md",
         }
-        for label, path in TEMPLATES.items():
-            if st.button(label, use_container_width=True):
-                p = Path(path)
-                if p.exists():
-                    st.session_state.template_loaded = p.read_text()
-                    st.success(f"Loaded: {label}")
-                else:
-                    st.error(f"Missing: {path}")
+        
+        # Display templates in 2-column grid
+        template_items = list(TEMPLATES.items())
+        for i in range(0, len(template_items), 2):
+            cols = st.columns(2)
+            for j, (label, path) in enumerate(template_items[i:i+2]):
+                with cols[j]:
+                    if st.button(label, use_container_width=True):
+                        p = Path(path)
+                        if p.exists():
+                            st.session_state.template_loaded = p.read_text()
+                            st.success(f"Loaded: {label}")
+                        else:
+                            st.error(f"Missing: {path}")
 
     # ── MAIN AREA ─────────────────────────────────────────────
     st.markdown("# ⚡ Forge Swarm")
