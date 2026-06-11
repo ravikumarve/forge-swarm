@@ -555,6 +555,7 @@ class SystemChecker:
     """Check system dependencies and health"""
 
     @staticmethod
+    @st.cache_data(ttl=5)
     def check_ollama() -> tuple[bool, str]:
         """Check if Ollama is running"""
         try:
@@ -564,8 +565,8 @@ class SystemChecker:
             return False, f"Ollama returned status {response.status_code}"
         except Exception:
             return False, "Ollama is not running. Start it with: ollama serve"
-
     @staticmethod
+    @st.cache_data(ttl=5)
     def get_available_models() -> List[str]:
         """Get list of available Ollama models from API, excluding embeddings."""
         try:
@@ -595,6 +596,7 @@ class SystemChecker:
         return False, "No LLM model found. Pull one with: ollama pull qwen2.5:3b"
 
     @staticmethod
+    @st.cache_data(ttl=10)
     def check_chromadb(persist_dir: str) -> tuple[bool, str]:
         """Check if ChromaDB can be initialized at path."""
         try:
