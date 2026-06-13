@@ -177,6 +177,44 @@ with st.form("settings_form", clear_on_submit=False):
 
     st.markdown("---")
 
+    # ── NVIDIA NIM Section ─────────────────────────────────────────
+    with st.expander("🔷 NVIDIA NIM Configuration", expanded=False):
+        st.caption("Cloud LLM provider settings. Only used when LLM Provider is set to `nvidia_nim`.")
+        nim = config.get("nvidia_nim", {})
+        col1, col2 = st.columns(2)
+        with col1:
+            nim_api_key = st.text_input(
+                "NIM API Key",
+                value=nim.get("api_key", ""),
+                type="password",
+                help="NVIDIA NIM API key. Can also be set via NIM_API_KEY environment variable.",
+            )
+            nim_model = st.text_input(
+                "NIM Model",
+                value=nim.get("model", "meta/llama-3.1-8b-instruct"),
+                help="NVIDIA NIM model ID (e.g. meta/llama-3.1-8b-instruct, deepseek-v4-flash)",
+            )
+        with col2:
+            nim_base_url = st.text_input(
+                "NIM Base URL",
+                value=nim.get("base_url", "https://integrate.api.nvidia.com/v1"),
+                help="NVIDIA NIM API endpoint",
+            )
+            nim_temperature = st.slider(
+                "NIM Temperature",
+                min_value=0.0, max_value=2.0, step=0.1,
+                value=float(nim.get("temperature", 0.7)),
+                help="Temperature for NVIDIA NIM model",
+            )
+            nim_max_tokens = st.number_input(
+                "NIM Max Tokens",
+                min_value=256, max_value=131072, step=1024,
+                value=int(nim.get("max_tokens", 8192)),
+                help="Maximum tokens for NVIDIA NIM model",
+            )
+
+    st.markdown("---")
+
     # ── Form Buttons ────────────────────────────────────────────────
     col1, col2, col3 = st.columns([1, 1, 4])
     with col1:
@@ -211,6 +249,17 @@ if submitted:
         config["agents"]["retry_on_below_threshold"] = bool(retry_on_below)
         config["agents"]["verbose"] = bool(verbose)
 
+        # Update NVIDIA NIM config
+        if "nvidia_nim" not in config:
+            config["nvidia_nim"] = {}
+        config["nvidia_nim"]["api_key"] = nim_api_key.strip()
+        config["nvidia_nim"]["model"] = nim_model.strip()
+        config["nvidia_nim"]["base_url"] = nim_base_url.strip()
+        config["nvidia_nim"]["temperature"] = float(nim_temperature)
+        config["nvidia_nim"]["max_tokens"] = int(nim_max_tokens)
+        if nim_api_key.strip():
+            os.environ["NIM_API_KEY"] = nim_api_key.strip()
+
         if Config.save(config):
             st.toast("✅ Settings saved to config.yaml!", icon="💾")
             st.success("✅ **Settings saved to `config.yaml`**")
@@ -229,6 +278,13 @@ if reset:
         config["embeddings"] = defaults.get("embeddings", {}).copy()
         config["memory"] = defaults.get("memory", {}).copy()
         config["agents"] = defaults.get("agents", {}).copy()
+        config["nvidia_nim"] = {
+            "model": "meta/llama-3.1-8b-instruct",
+            "base_url": "https://integrate.api.nvidia.com/v1",
+            "api_key": "",
+            "temperature": 0.7,
+            "max_tokens": 8192,
+        }
 
         # Ensure min_score_to_store exists (it's in config.yaml but not DEFAULT_CONFIG)
         config["memory"]["min_score_to_store"] = 7

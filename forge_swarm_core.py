@@ -2044,6 +2044,7 @@ def render_sidebar(config: dict) -> tuple:
     )
     if provider != current_provider:
         config["llm"]["provider"] = provider
+        Config.save(config)
         st.rerun()
 
     if provider == "ollama":
@@ -2094,9 +2095,10 @@ def render_sidebar(config: dict) -> tuple:
             "API Key", value=nim_config.get("api_key", ""),
             type="password", label_visibility="collapsed",
         )
-        if api_key:
+        if api_key and api_key != nim_config.get("api_key", ""):
             config["nvidia_nim"]["api_key"] = api_key
             os.environ["NIM_API_KEY"] = api_key
+            Config.save(config)
 
     st.markdown("---")
 
