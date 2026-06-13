@@ -16,6 +16,25 @@
 - **Files Created**: LICENSE, install.sh, install.ps1, CONTRIBUTING.md, CODE_OF_CONDUCT.md, gumroad_product_description.md, .github/ISSUE_TEMPLATE/*, docs/*
 - **Test Results**: All 28 installation checks passed - FORGE SWARM v3.0 GUMROAD READY
 
+### [2026-06-13 14:30] - Tier 1 + Tier 2 Sprint (Part 1)
+- **State**: Success
+- **MCP Data Used**: None (local file operations only)
+- **Agents Deployed**: @orchestrator (main execution)
+- **Architectural Decision**:
+  - Extracted forge_swarm_core.py with all shared classes
+  - Multi-page app via Streamlit pages/ directory
+  - ProjectStore persists to projects/ as JSON files
+  - Sidebar extracted into shared render_sidebar() function
+  - Lazy imports for crewai, chromadb, ollama, litellm (17s → 1.5s startup)
+- **Next Turn Directive**: Implement Settings Editor page (in-app config.yaml editor)
+- **Files Changed/Created**:
+  - forge_swarm_core.py (core module)
+  - Home.py (dashboard, was forge_swarm_with_ui.py)
+  - pages/01_Projects.py (project CRUD)
+  - pages/02_History.py (run history browser)
+  - pages/03_Playground.py (agent chat)
+- **Pending Tasks**: Settings Editor (Tier 2, item 6) — in-app config editor
+
 ---
 
 ## 🧠 AGENT MISSION BRIEFING
