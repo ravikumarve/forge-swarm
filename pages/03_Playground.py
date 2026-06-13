@@ -68,6 +68,24 @@ with st.sidebar:
     provider, model = render_sidebar(config)
 
     st.markdown("---")
+    st.markdown("### 🤖 SELECT AGENT")
+    agent_cols = st.columns(len(AGENT_KEYS))
+    for i, key in enumerate(AGENT_KEYS):
+        a = AGENT_DEFS[key]
+        active = key == st.session_state.playground_agent
+        with agent_cols[i]:
+            if st.button(
+                a['icon'],
+                key=f"agent_sel_{key}",
+                use_container_width=True,
+                type="primary" if active else "secondary",
+                help=f"{a['role']}: {a['goal'][:80]}",
+            ):
+                if key != st.session_state.playground_agent:
+                    st.session_state.playground_agent = key
+                    st.rerun()
+
+    st.markdown("---")
     st.markdown("### 🧪 PLAYGROUND")
 
     temperature = st.slider(
@@ -94,36 +112,6 @@ st.markdown("""
     </p>
 </div>
 """, unsafe_allow_html=True)
-
-# ── Agent selector: compact clickable cards ──────────────────────────
-st.markdown('<div class="section-tag">SELECT AGENT</div>', unsafe_allow_html=True)
-cols = st.columns(len(AGENT_KEYS))
-for i, key in enumerate(AGENT_KEYS):
-    a = AGENT_DEFS[key]
-    active = key == st.session_state.playground_agent
-    with cols[i]:
-        card_class = "glass-card state-active" if active else "glass-card state-idle"
-        st.markdown(f"""
-        <div class="{card_class}" style="text-align: center; padding: 16px 4px; margin: 0;">
-            <div style="font-size: 26px; margin-bottom: 2px;">{a['icon']}</div>
-            <div style="font-family: 'Space Grotesk', sans-serif; font-size: 13px; font-weight: 700;
-                        color: {'#e0e0e0' if active else 'rgba(255,255,255,0.5)'};">
-                {a['short']}
-            </div>
-            <div style="font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(255,255,255,0.3); margin-top: 2px;">
-                {a['role'][:20]}
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        # Full-width select button below each card
-        if st.button("✅ Active" if active else "▸ Select",
-                     key=f"sel_{key}", use_container_width=True,
-                     type="primary" if active else "secondary",
-                     help=a['role']):
-            if key != st.session_state.playground_agent:
-                st.session_state.playground_agent = key
-                st.rerun()
 
 # ── Active agent bar (compact) ──────────────────────────────────────
 agent_key = st.session_state.playground_agent
@@ -191,11 +179,24 @@ with chat_container:
     else:
         for msg in st.session_state.playground_messages:
             is_user = msg["role"] == "user"
-            justify = "flex-end" if is_user else "flex-start"
-            bubble_bg = "rgba(0, 243, 255, 0.08)" if is_user else f"rgba({int(ac[1:3], 16)}, {int(ac[3:5], 16)}, {int(ac[5:7], 16)}, 0.08)"
-            bubble_border = "1px solid rgba(0, 243, 255, 0.2)" if is_user else f"1px solid {ac}30"
-            label_color = "#00f3ff" if is_user else ac
-            label_text = "🧑 You" if is_user else f"{agent['icon']} {agent['short']}"
+            if is_user:
+                label_text = "🧑 You"
+                justify = "flex-end"
+                bubble_bg = "rgba(0, 243, 255, 0.08)"
+                bubble_border = "1px solid rgba(0, 243, 255, 0.2)"
+                label_color = "#00f3ff"
+            else:
+                # Use per-message agent metadata (stored from when msg was sent)
+                # with fallback to current agent for old messages
+                agent_icon = msg.get("agent_icon", agent['icon'])
+                agent_name = msg.get("agent_name", agent['short'])
+                agent_color = msg.get("agent_color", ac)
+                label_text = f"{agent_icon} {agent_name}"
+                justify = "flex-start"
+                r, g, b = int(agent_color[1:3], 16), int(agent_color[3:5], 16), int(agent_color[5:7], 16)
+                bubble_bg = f"rgba({r}, {g}, {b}, 0.08)"
+                bubble_border = f"1px solid {agent_color}30"
+                label_color = agent_color
 
             st.markdown(f"""
             <div style="display: flex; justify-content: {justify}; margin-bottom: 10px;">
@@ -264,12 +265,18 @@ if prompt and prompt.strip():
             "role": "assistant",
             "content": response,
             "time": f"{elapsed:.1f}s",
+            "agent_icon": agent['icon'],
+            "agent_name": agent['short'],
+            "agent_color": agent['color'],
         })
     except Exception as e:
         st.session_state.playground_messages.append({
             "role": "assistant",
             "content": f"❌ Error: {str(e)}",
             "time": "",
+            "agent_icon": agent['icon'],
+            "agent_name": agent['short'],
+            "agent_color": agent['color'],
         })
 
     st.rerun()
