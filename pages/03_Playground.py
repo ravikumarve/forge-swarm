@@ -84,39 +84,44 @@ with st.sidebar:
 
 # ── Main Area ────────────────────────────────────────────────────────
 st.markdown("""
-<div style="margin-bottom: 16px;">
+<div style="margin-bottom: 24px;">
     <div class="section-tag">AGENT PLAYGROUND</div>
     <h1 style="font-family: 'Space Grotesk', sans-serif; font-size: 2.2rem; font-weight: 700; margin-top: 8px;">
         🧪 Chat with Individual Agents
     </h1>
+    <p style="color: rgba(255,255,255,0.6); font-size: 1rem;">
+        Talk to each agent in isolation. Tweak system prompts and test responses without running the full 5-agent pipeline.
+    </p>
 </div>
 """, unsafe_allow_html=True)
 
 # ── Agent selector: compact clickable cards ──────────────────────────
-current = st.session_state.playground_agent
+st.markdown('<div class="section-tag">SELECT AGENT</div>', unsafe_allow_html=True)
 cols = st.columns(len(AGENT_KEYS))
 for i, key in enumerate(AGENT_KEYS):
     a = AGENT_DEFS[key]
-    active = key == current
-    border_color = a["color"] if active else "rgba(255,255,255,0.08)"
-    bg = f"rgba({int(a['color'][1:3], 16)}, {int(a['color'][3:5], 16)}, {int(a['color'][5:7], 16)}, 0.12)" if active else "rgba(255,255,255,0.02)"
+    active = key == st.session_state.playground_agent
     with cols[i]:
+        card_class = "glass-card state-active" if active else "glass-card state-idle"
         st.markdown(f"""
-        <div style="background: {bg}; border: 1px solid {border_color}; border-radius: 8px;
-                    padding: 10px 4px; text-align: center; cursor: pointer;
-                    {'box-shadow: 0 0 12px ' + a['color'] + '40;' if active else ''}
-                    transition: all 0.2s;">
-            <div style="font-size: 22px;">{a['icon']}</div>
-            <div style="font-family: 'Space Grotesk', sans-serif; font-size: 12px; font-weight: {'700' if active else '400'};
-                        color: {'#e0e0e0' if active else 'rgba(255,255,255,0.5)'}; margin-top: 4px;">
+        <div class="{card_class}" style="text-align: center; padding: 16px 4px; margin: 0;">
+            <div style="font-size: 26px; margin-bottom: 2px;">{a['icon']}</div>
+            <div style="font-family: 'Space Grotesk', sans-serif; font-size: 13px; font-weight: 700;
+                        color: {'#e0e0e0' if active else 'rgba(255,255,255,0.5)'};">
                 {a['short']}
+            </div>
+            <div style="font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(255,255,255,0.3); margin-top: 2px;">
+                {a['role'][:20]}
             </div>
         </div>
         """, unsafe_allow_html=True)
 
-        # Column-button to select
-        if st.button("▸", key=f"sel_{key}", help=f"Select {a['role']}"):
-            if key != current:
+        # Full-width select button below each card
+        if st.button("✅ Active" if active else "▸ Select",
+                     key=f"sel_{key}", use_container_width=True,
+                     type="primary" if active else "secondary",
+                     help=a['role']):
+            if key != st.session_state.playground_agent:
                 st.session_state.playground_agent = key
                 st.rerun()
 
