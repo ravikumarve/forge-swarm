@@ -2065,31 +2065,43 @@ def render_sidebar(config: dict) -> tuple:
                 model = "qwen2.5:3b"
     elif provider == "nvidia_nim":
         nim_models_config = config.get("nvidia_nim", {}).get("models", [])
-        nim_model_options = []
-        nim_model_ids = []
+        nim_model_options = ["Custom..."]
+        nim_model_ids = [""]
         for model_data in nim_models_config:
             model_id = model_data.get("id", "")
             model_name = model_data.get("name", model_id)
             nim_model_options.append(model_name)
             nim_model_ids.append(model_id)
-        if not nim_model_options:
+        if len(nim_model_options) <= 1:
             nim_model_ids = [
+                "",
                 "meta/llama-3.1-8b-instruct",
                 "meta/llama-3.1-70b-instruct",
                 "mistralai/mistral-7b-instruct-v0.3",
             ]
-            nim_model_options = nim_model_ids
+            nim_model_options = ["Custom...", "Llama 3.1 8B", "Llama 3.1 70B", "Mistral 7B"]
+
         current_model = config["nvidia_nim"]["model"]
         try:
-            current_index = nim_model_ids.index(current_model)
+            current_index = nim_model_ids.index(current_model) if current_model else 0
         except ValueError:
-            current_index = 0
+            current_index = 0  # Not in list → show "Custom..."
         selected_option = st.selectbox(
             "Model", options=nim_model_options, index=current_index,
             label_visibility="collapsed",
         )
-        model = nim_model_ids[nim_model_options.index(selected_option)]
-        config["nvidia_nim"]["model"] = model
+        if selected_option == "Custom...":
+            # Saved model isn't in dropdown → show text input
+            model = st.text_input(
+                "Custom NIM model",
+                value=current_model,
+                label_visibility="collapsed",
+                placeholder="e.g. meta/llama-3.1-8b-instruct",
+            )
+        else:
+            model = nim_model_ids[nim_model_options.index(selected_option)]
+        if model:
+            config["nvidia_nim"]["model"] = model
         nim_config = config["nvidia_nim"]
         api_key = st.text_input(
             "API Key", value=nim_config.get("api_key", ""),
