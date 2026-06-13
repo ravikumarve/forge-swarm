@@ -64,8 +64,8 @@ print("\n💾 ChromaDB")
 check("ChromaDB module", lambda: __import__("chromadb"))
 
 print("\n🚀 Application")
-check("main file exists", lambda: (_ for _ in ()).throw(FileNotFoundError()) if not Path("forge_swarm_with_ui.py").exists() else None)
-check("main file compiles", lambda: __import__("py_compile").compile("forge_swarm_with_ui.py"))
+check("main file exists", lambda: (_ for _ in ()).throw(FileNotFoundError()) if not Path("Home.py").exists() else None)
+check("main file compiles", lambda: __import__("py_compile").compile("Home.py"))
 
 print("\n" + "═" * 42)
 if not FAIL:

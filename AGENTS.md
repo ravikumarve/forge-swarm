@@ -25,7 +25,7 @@ You are an autonomous coding agent executing a **full upgrade** of an existing F
 **Rules:**
 - Read this entire file before touching any code
 - Do not break existing working features
-- Run `python -m py_compile forge_swarm_with_ui.py` after every major change
+- Run `python -m py_compile Home.py` after every major change
 - Commit-worthy state after each phase — no half-broken files
 
 ---
@@ -45,7 +45,7 @@ You are an autonomous coding agent executing a **full upgrade** of an existing F
 
 ```
 forge-swarm/
-├── forge_swarm_with_ui.py     ← Main app (heavily modified)
+├── Home.py     ← Main app (heavily modified)
 ├── config.yaml                ← Updated with new config keys
 ├── requirements.txt           ← Add: pygments, RestrictedPython
 ├── test_installation.py       ← Updated smoke tests
@@ -210,7 +210,7 @@ Backstory: Zero tolerance for mediocrity. Has reviewed 10,000+ PRs. Scores on:
 
 ### A2: Add CriticParser Class
 
-Add this class to `forge_swarm_with_ui.py`:
+Add this class to `Home.py`:
 
 ```python
 class CriticParser:
@@ -322,7 +322,7 @@ def run(self, user_request: str, context: str = "") -> Dict[str, Any]:
 
 ### B1: Dark Theme CSS
 
-Add this constant at the top of `forge_swarm_with_ui.py` after imports:
+Add this constant at the top of `Home.py` after imports:
 
 ```python
 DARK_THEME_CSS = """
@@ -965,8 +965,8 @@ def _chroma():
 check("ChromaDB init", _chroma)
 
 print("\n🚀 Application")
-check("main file exists", lambda: (_ for _ in ()).throw(FileNotFoundError()) if not Path("forge_swarm_with_ui.py").exists() else None)
-check("main file compiles", lambda: __import__("py_compile").compile("forge_swarm_with_ui.py"))
+check("main file exists", lambda: (_ for _ in ()).throw(FileNotFoundError()) if not Path("Home.py").exists() else None)
+check("main file compiles", lambda: __import__("py_compile").compile("Home.py"))
 
 print("\n" + "═" * 42)
 if not FAIL:
@@ -1021,7 +1021,7 @@ Execute in strict order. Do not skip phases.
 
 ### Phase 6 — Verification (4 tasks)
 ```
-16. python -m py_compile forge_swarm_with_ui.py  ← must pass
+16. python -m py_compile Home.py  ← must pass
 17. Replace test_installation.py with upgraded version
 18. python test_installation.py  ← must exit 0
 19. Verify all 5 templates exist in templates/

@@ -148,12 +148,12 @@ bash install.sh  # Windows: install.ps1
 2. Install Ollama from https://ollama.ai
 3. Pull models: `ollama pull llama3.1:8b` and `ollama pull nomic-embed-text`
 4. Clone repository and run: `pip install -r requirements.txt`
-5. Launch: `streamlit run forge_swarm_with_ui.py`
+5. Launch: `streamlit run Home.py`
 
 ## What's Included
 
 ### Files
-- `forge_swarm_with_ui.py` — Main application
+- `Home.py` — Main application
 - `config.yaml` — Runtime configuration
 - `requirements.txt` — Python dependencies
 - `test_installation.py` — Installation verification
@@ -221,7 +221,7 @@ A: Yes! Once you've installed Ollama and pulled the models, Forge Swarm works co
 A: Forge Swarm uses ChromaDB to store lessons from completed tasks. When you start a new task, it retrieves relevant past lessons via vector similarity and injects them as context. Only lessons scoring 7+/10 are stored.
 
 **Q: Can I customize the agents?**
-A: Yes! You can edit agent backstories in `forge_swarm_with_ui.py` or modify `config.yaml` to adjust behavior, quality thresholds, retry logic, and more.
+A: Yes! You can edit agent backstories in `Home.py` or modify `config.yaml` to adjust behavior, quality thresholds, retry logic, and more.
 
 **Q: What's the difference between tiers?**
 A: All tiers include the full Forge Swarm v3.0. Pro and Enterprise tiers include priority support, custom configurations, additional templates, and team licensing.

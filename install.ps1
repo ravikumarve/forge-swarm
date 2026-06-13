@@ -210,7 +210,7 @@ function Start-ForgeSwarm {
     & .\venv\Scripts\Activate.ps1
 
     # Launch Streamlit
-    streamlit run forge_swarm_with_ui.py
+    streamlit run Home.py
 }
 
 # Main installation flow

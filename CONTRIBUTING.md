@@ -56,7 +56,7 @@ Please read and follow our [Code of Conduct](CODE_OF_CONDUCT.md).
 
 7. Start the development server:
    ```bash
-   streamlit run forge_swarm_with_ui.py
+   streamlit run Home.py
    ```
 
 ## Submitting Changes

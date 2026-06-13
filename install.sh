@@ -224,7 +224,7 @@ launch_forge_swarm() {
     fi
 
     # Launch Streamlit
-    streamlit run forge_swarm_with_ui.py
+    streamlit run Home.py
 }
 
 # Main installation flow

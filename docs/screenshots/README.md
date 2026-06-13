@@ -16,7 +16,7 @@ This directory should contain the following screenshots for the README.md:
 
 ## How to Create Screenshots
 
-1. Run Forge Swarm: `streamlit run forge_swarm_with_ui.py`
+1. Run Forge Swarm: `streamlit run Home.py`
 2. Use a screenshot tool (like Snagit, Lightshot, or built-in tools)
 3. For GIFs, use a tool like LICEcap or OBS Studio
 4. Ensure screenshots are high resolution (at least 1920x1080)

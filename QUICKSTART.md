@@ -47,7 +47,7 @@ mkdir forge-swarm
 cd forge-swarm
 
 # Download the files (or git clone if you have the repo)
-# You need: forge_swarm_with_ui.py, config.yaml, requirements.txt
+# You need: Home.py, config.yaml, requirements.txt
 
 # Install Python dependencies
 pip install streamlit crewai==0.28.8 crewai-tools langchain-ollama chromadb pyyaml
@@ -56,7 +56,7 @@ pip install streamlit crewai==0.28.8 crewai-tools langchain-ollama chromadb pyya
 ### 5. Run!
 
 ```bash
-streamlit run forge_swarm_with_ui.py
+streamlit run Home.py
 ```
 
 Your browser should open automatically to http://localhost:8501

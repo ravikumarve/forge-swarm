@@ -13,7 +13,7 @@ Requirements:
 Before running:
     1. Start Ollama: ollama serve
     2. Pull models: ollama pull llama3.1:8b && ollama pull nomic-embed-text
-    3. Run: streamlit run forge_swarm_with_ui.py
+    3. Run: streamlit run Home.py
 """
 
 from __future__ import annotations

@@ -36,7 +36,7 @@ cd forge-swarm
 bash install.sh
 
 # 2. Launch Forge Swarm
-streamlit run forge_swarm_with_ui.py
+streamlit run Home.py
 
 # 3. Open http://localhost:8501
 ```
@@ -238,7 +238,7 @@ pip install -r requirements.txt
 
 ```bash
 python test_installation.py     # All checks must pass
-streamlit run forge_swarm_with_ui.py
+streamlit run Home.py
 ```
 
 Open **http://localhost:8501** in your browser.
@@ -247,7 +247,7 @@ Open **http://localhost:8501** in your browser.
 
 ## Quick Start
 
-1. Launch: `streamlit run forge_swarm_with_ui.py`
+1. Launch: `streamlit run Home.py`
 2. Open: `http://localhost:8501`
 3. Describe what you want to build in the text area
 4. Optionally add context: paste code, errors, or upload files
@@ -454,7 +454,7 @@ A: Forge Swarm uses ChromaDB to store lessons from completed tasks. When you sta
 A: The sandbox uses RestrictedPython to limit execution to safe imports only. It blocks filesystem access, network calls, and system commands. However, always review generated code before running in production.
 
 **Q: Can I customize the agents?**
-A: Yes! You can edit agent backstories in `forge_swarm_with_ui.py` or modify `config.yaml` to adjust behavior, quality thresholds, retry logic, and more.
+A: Yes! You can edit agent backstories in `Home.py` or modify `config.yaml` to adjust behavior, quality thresholds, retry logic, and more.
 
 ### Pricing & Support
 
@@ -476,7 +476,7 @@ A: Email support@forgeswarm.com or join our Discord community at discord.gg/forg
 
 ```
 forge-swarm/
-├── forge_swarm_with_ui.py    ← Main application
+├── Home.py    ← Main application
 ├── config.yaml               ← Runtime configuration
 ├── requirements.txt          ← Pinned dependencies
 ├── test_installation.py      ← Smoke test
