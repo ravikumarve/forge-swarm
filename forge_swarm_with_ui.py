@@ -367,12 +367,53 @@ if st.session_state.last_result:
     AgentStatusDisplay.render_score(critic.get("score", 0), critic.get("verdict", "UNKNOWN"))
     st.caption(f"Completed in {result.get('iterations', 1)} iteration(s)")
 
-    tab1, tab2, tab3, tab4 = st.tabs(["📄 Final Code", "📋 Agent Log", "🧠 Memory Context", "🧪 Run Code"])
+    files = result.get("files", {})
+    file_list = result.get("file_list", [])
 
-    with tab1:
+    tab_labels = ["📄 Final Code", "📋 Agent Log", "🧠 Memory Context", "🧪 Run Code"]
+    if file_list:
+        tab_labels.insert(0, "📁 Project Files")
+
+    tabs = st.tabs(tab_labels)
+    tab_idx = 0
+
+    # Project Files tab (only when multi-file output exists)
+    if file_list:
+        with tabs[tab_idx]:
+            tab_idx += 1
+            st.markdown(f"**{len(file_list)} files** generated")
+            st.markdown("---")
+            for fname in file_list:
+                content = files.get(fname, "")
+                lang = "python" if fname.endswith(".py") else \
+                       "markdown" if fname.endswith((".md", ".rst")) else \
+                       "yaml" if fname.endswith((".yaml", ".yml")) else \
+                       "json" if fname.endswith(".json") else \
+                       "text"
+                with st.expander(f"📄 {fname}", expanded=True):
+                    st.code(content, language=lang)
+
+            # Download as zip
+            if st.button("📦 Download All as ZIP", type="primary"):
+                import io, zipfile
+                buf = io.BytesIO()
+                with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+                    for fname, content in files.items():
+                        zf.writestr(fname, content)
+                st.download_button(
+                    "⬇️ Download ZIP",
+                    data=buf.getvalue(),
+                    file_name="forge_swarm_output.zip",
+                    mime="application/zip",
+                )
+        tab_idx = 1
+
+    with tabs[tab_idx]:
+        tab_idx += 1
         st.code(result.get("final_code", ""), language="python")
 
-    with tab2:
+    with tabs[tab_idx]:
+        tab_idx += 1
         st.text(result.get("agent_log", ""))
         issues = critic.get("issues", [])
         if issues:
@@ -380,7 +421,8 @@ if st.session_state.last_result:
             for issue in issues:
                 st.markdown(f"- {issue}")
 
-    with tab3:
+    with tabs[tab_idx]:
+        tab_idx += 1
         if memory_manager and st.session_state.run_history:
             similar = memory_manager.query_similar(st.session_state.run_history[-1]["request"])
             if similar:
@@ -392,7 +434,8 @@ if st.session_state.last_result:
         else:
             st.info("No memory context available.")
 
-    with tab4:
+    with tabs[tab_idx]:
+        tab_idx += 1
         sandbox = CodeSandbox(config)
         sandbox.render_ui(result.get("final_code", ""))
 

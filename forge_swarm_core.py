@@ -1457,6 +1457,29 @@ class SwarmOrchestrator:
 # ============================================================================
 
 
+# ============================================================================
+# MULTI-FILE OUTPUT PARSER
+# ============================================================================
+
+
+def parse_multi_file_output(raw_output: str) -> Dict[str, str]:
+    """Parse '=== FILE: <path> ===' markers from agent output into a dict.
+
+    Returns {filename: content, ...}. Falls back to {"output.py": raw_output}
+    if no FILE markers are found.
+    """
+    import re
+    pattern = r'=== FILE:\s+(.+?)\s*===\s*\n(.*?)(?=\n=== FILE:\s|\Z)'
+    matches = re.findall(pattern, raw_output, re.DOTALL)
+    if matches:
+        files = {}
+        for filename, content in matches:
+            files[filename.strip()] = content.strip()
+        return files
+    # Fallback: wrap entire output as a single file
+    return {"output.py": raw_output.strip()}
+
+
 class TaskOrchestrator:
     """Orchestrates task creation and crew execution with retry loop."""
 
@@ -1492,13 +1515,22 @@ class TaskOrchestrator:
         )
         tasks.append(research_task)
 
-        # Coding task
+        # Coding task — multi-file output
         code_task = _Task(
             description=(
-                f"Write complete, production-grade code.\n"
-                f"No placeholders. No TODOs. No magic numbers. Use type hints."
+                f"Write complete, production-grade code for:\n\n{user_request}\n\n"
+                f"No placeholders. No TODOs. No magic numbers. Use type hints.\n\n"
+                f"IMPORTANT: Structure your output as MULTIPLE FILES using this exact format:\n"
+                f"=== FILE: <filename> ===\n"
+                f"<file content>\n\n"
+                f"=== FILE: <another_filename> ===\n"
+                f"<file content>\n\n"
+                f"Separate each file with '=== FILE: filename ===' markers.\n"
+                f"Include files like: main.py (or app.py), models.py, routes.py if applicable,\n"
+                f"requirements.txt, README.md, .env.example, and any config files.\n"
+                f"Make it a complete, runnable project."
             ),
-            expected_output="Complete runnable code",
+            expected_output="Multi-file project code with === FILE: markers",
             agent=self.agents["coder"],
         )
         tasks.append(code_task)
@@ -1564,11 +1596,17 @@ class TaskOrchestrator:
 
             try:
                 result = crew.kickoff()
-                critic_data = CriticParser.parse(str(result))
+                raw_output = str(result)
+                critic_data = CriticParser.parse(raw_output)
                 agent_log.append(f"📊 Critic score: {critic_data['score']}/10")
 
+                # Parse multi-file output
+                files = parse_multi_file_output(raw_output)
+
                 last_result = {
-                    "final_code": str(result),
+                    "final_code": raw_output,
+                    "files": files,
+                    "file_list": sorted(files.keys()) if files else [],
                     "critic_result": critic_data,
                     "iterations": iteration,
                     "agent_log": "\n".join(agent_log),
