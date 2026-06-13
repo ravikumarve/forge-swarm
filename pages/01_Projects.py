@@ -7,9 +7,7 @@ Create, browse, and manage code generation projects with persistent storage.
 from __future__ import annotations
 
 import os
-import json
 from pathlib import Path
-from datetime import datetime
 
 os.environ["CREWAI_DISABLE_TELEMETRY"] = "true"
 os.environ["OTEL_SDK_DISABLED"] = "true"
@@ -19,44 +17,16 @@ os.environ["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY", "sk-dummy-ollama-only
 import streamlit as st
 
 from forge_swarm_core import (
-    Config, DARK_THEME_CSS, ProjectStore, get_memory_manager,
-    SystemChecker, AgentStatusDisplay,
+    Config, DARK_THEME_CSS, ProjectStore, render_sidebar,
 )
 
 st.set_page_config(page_title="Projects - Forge Swarm", page_icon="📁", layout="wide")
 st.markdown(DARK_THEME_CSS, unsafe_allow_html=True)
-
 config = Config.load()
 
 # ── Sidebar ──────────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown("""
-    <div style="margin-bottom: 24px;">
-        <div style="font-family: 'Space Grotesk', sans-serif; font-size: 14px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;">
-            FORGE_SWARM
-        </div>
-        <div style="font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(255,255,255,0.4); letter-spacing: 0.1em; text-transform: uppercase;">
-            v3.0 // Projects
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    with st.spinner(""):
-        checks = SystemChecker.run_all_checks(config)
-    st.markdown("### SYS_STATUS")
-    status_html = "<div style='display: flex; gap: 8px; margin-bottom: 20px;'>"
-    for name, (passed, _) in checks.items():
-        icon = "●" if passed else "○"
-        color = "#00ff41" if passed else "#ff00ff"
-        status_html += f"<span title='{name}' style='color: {color}; font-size: 14px;'>{icon}</span>"
-    status_html += "</div>"
-    st.markdown(status_html, unsafe_allow_html=True)
-
-    st.markdown("### 📁 NAVIGATION")
-    projects = ProjectStore.list_projects()
-    st.metric("Total Projects", len(projects))
-    total_runs = sum(p.get("run_count", 0) for p in projects)
-    st.metric("Total Runs", total_runs)
+    render_sidebar(config)
 
 # ── Main Area ────────────────────────────────────────────────────────
 st.markdown("""
@@ -71,14 +41,12 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# ── New Project Button ───────────────────────────────────────────────
 col1, col2 = st.columns([6, 1])
 with col2:
     if st.button("➕ New Project", type="primary", use_container_width=True):
         st.session_state.show_new_project = True
         st.rerun()
 
-# ── New Project Dialog ───────────────────────────────────────────────
 if st.session_state.get("show_new_project"):
     with st.form("new_project_form", clear_on_submit=True):
         st.markdown("### ➕ New Project")
@@ -97,9 +65,7 @@ if st.session_state.get("show_new_project"):
                 st.session_state.show_new_project = False
                 st.rerun()
 
-# ── Project List ─────────────────────────────────────────────────────
 projects = ProjectStore.list_projects()
-
 if not projects:
     st.markdown("""
     <div class="glass-panel" style="padding: 48px; text-align: center; margin-top: 32px;">
@@ -112,12 +78,10 @@ if not projects:
     </div>
     """, unsafe_allow_html=True)
 else:
-    # Selected project
     selected_id = st.session_state.get("_selected_project_id")
     if not selected_id or selected_id not in [p["id"] for p in projects]:
         selected_id = projects[0]["id"]
 
-    # Project tabs
     proj_titles = [p["name"][:40] for p in projects]
     proj_ids = [p["id"] for p in projects]
     default_idx = proj_ids.index(selected_id) if selected_id in proj_ids else 0
@@ -129,7 +93,6 @@ else:
     selected_id = proj_ids[tab_labels.index(selected_tab)]
     st.session_state._selected_project_id = selected_id
 
-    # ── Project Detail ───────────────────────────────────────────
     project = ProjectStore.get_project(selected_id)
     if project:
         st.markdown("---")
@@ -154,10 +117,8 @@ else:
                 else:
                     st.session_state.confirm_delete_project = True
                     st.warning("Click again to confirm")
-
         st.caption(f"Created: {project.get('created_at', '')[:10]}  ·  Updated: {project.get('updated_at', '')[:10]}")
 
-        # Runs
         runs = ProjectStore.get_runs(selected_id)
         if runs:
             st.markdown("### 📜 Run History")
