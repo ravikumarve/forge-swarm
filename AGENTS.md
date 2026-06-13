@@ -6,6 +6,36 @@
 
 ## 💾 Session Memory Ledger (For context7 MCP)
 
+### [2026-06-13 16:00] - Agent Prompt Scoping + Chat Input + Theme Consistency
+- **State**: Success
+- **MCP Data Used**: None (local file reads only)
+- **Agents Deployed**: @orchestrator (direct execution)
+- **Architectural Decision**:
+  - Made agent system prompts per-agent (`custom_prompt_planner`, `custom_prompt_critic`, etc.) instead of a single global `custom_prompt` key — prevents prompt bleed where Critic would respond as "Senior Software Craftsperson" (Coder's role)
+  - Replaced `st.text_area` + Send/Ctrl+Enter with `st.chat_input` (native Enter-to-send, Shift+Enter newline)
+  - Replaced recall pre-fill (which required text_area) with clickable recall button that auto-sends the last user message — works with `st.chat_input` which can't be pre-filled
+  - Standardized Home.py header to match other pages: `font-size: 2.2rem` and `margin-bottom: 24px`
+- **Files Modified**: `pages/03_Playground.py` (per-agent prompts, chat_input, recall), `Home.py` (theme consistency)
+- **Build Status**: All 6 files compile cleanly
+
+### [2026-06-13 15:15] - Settings Editor + Theme Consistency Fix
+- **State**: Success (with additional NIM refresh fix)
+- **MCP Data Used**: None (local file reads only)
+- **Agents Deployed**: @orchestrator (direct execution)
+- **Architectural Decision**:
+  - Created pages/04_Settings.py as an in-app config.yaml editor with LLM, Embeddings, Memory, and Agents sections
+  - Fixed Playground agent cards to use glass-card CSS class (consistent with Home.py pipeline display)
+  - Replaced invisible "▸" buttons with full-width visible "✅ Active" / "▸ Select" buttons using primary/secondary styling
+  - Standardized page headers: all pages now have consistent margin-bottom (24px), h1 styling, and description <p> tags
+  - **Fixed infinite refresh loop**: `render_sidebar()` was changing provider in-memory but never saving to config.yaml — `Config.save()` was missing before `st.rerun()`. Same fix for API key input.
+  - **Added NVIDIA NIM section** to Settings page: API key (password), model, base URL, temperature, max tokens in a collapsible expander
+  - **Fixed NIM model overwrite**: Sidebar's NIM model dropdown only listed models from `config.yaml`'s predefined list. If user saved a custom model (e.g. `meta/llama-3.1-8b-instruct`) via Settings, the sidebar silently fell back to index 0 (kimi-k2.6). Fixed by adding "Custom..." option + text input fallback.
+- **Files Created**: pages/04_Settings.py (~300 lines)
+- **Files Modified**: pages/03_Playground.py (header, agent card rendering), forge_swarm_core.py (Config.save + Custom NIM model support), pages/04_Settings.py (NVIDIA NIM section)
+- **Commits Created**: `2bda029` feat(tier2): Settings Editor, `e04130b` fix(ui): theme+Playground, `5475a3c` fix(ui): persist provider/apikey, `ec0cccb` fix(ui): Custom NIM model support, `ce27165` fix(ui): route nvidia_nim LLM calls to correct base_url, `2b55a79` fix(ui): compact sidebar agent selector + per-message agent labels, `74f7fc4` fix(ui): sleek chat bubbles with accent bars + text input with recall + copy
+- **Next Turn Directive**: None pending — Tier 2 complete
+- **Build Status**: All 6 files compile cleanly
+
 ### [2025-04-22 03:25] - Gumroad-Ready Sprint Completion
 - **State**: Success
 - **MCP Data Used**: None (local file operations only)

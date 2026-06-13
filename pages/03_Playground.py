@@ -54,14 +54,18 @@ AGENT_DEFS = {
 AGENT_KEYS = list(AGENT_DEFS.keys())
 
 # ── Session state ────────────────────────────────────────────────────
-for key in ["playground_messages", "playground_agent", "custom_prompt"]:
+for key in ["playground_messages", "playground_agent"]:
     if key not in st.session_state:
         if key == "playground_messages":
             st.session_state.playground_messages = []
         elif key == "playground_agent":
             st.session_state.playground_agent = "coder"
-        elif key == "custom_prompt":
-            st.session_state.custom_prompt = ""
+
+# Per-agent custom prompts — prevents prompt bleed when switching agents
+for ak in AGENT_KEYS:
+    key = f"custom_prompt_{ak}"
+    if key not in st.session_state:
+        st.session_state[key] = ""
 
 # ── Sidebar ──────────────────────────────────────────────────────────
 with st.sidebar:
@@ -135,25 +139,27 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# ── Prompt editor (collapsible) ─────────────────────────────────────
+# ── Prompt editor (collapsible, per-agent) ─────────────────────────
 with st.expander("📝 Edit agent prompt", expanded=False):
-    default_prompt = st.session_state.get("custom_prompt", "") or (
+    custom_key = f"custom_prompt_{agent_key}"
+    saved = st.session_state.get(custom_key, "")
+    default_val = saved or (
         f"You are {agent['role']}.\n\n"
         f"Goal: {agent['goal']}\n\n"
         f"Backstory: {agent['backstory']}\n\n"
         f"Respond as this agent. Be concise, direct, and true to your role."
     )
     edited = st.text_area(
-        "System prompt", value=default_prompt, height=200,
+        "System prompt", value=default_val, height=200,
         help="This prompt is sent to the LLM before your message. Edit it to change agent behavior.",
         label_visibility="collapsed",
     )
-    st.session_state.custom_prompt = edited
+    st.session_state[custom_key] = edited
 
     col_r1, col_r2 = st.columns([1, 5])
     with col_r1:
         if st.button("🔄 Reset", use_container_width=True):
-            st.session_state.custom_prompt = ""
+            st.session_state[custom_key] = ""
             st.rerun()
 
 # ── Chat interface ──────────────────────────────────────────────────
@@ -240,41 +246,42 @@ with chat_container:
 # ── Input area ──────────────────────────────────────────────────────
 st.markdown("---")
 
-# Input row: text area + send + recall
-recall_val = st.session_state.get("_recall_prompt", "")
-input_text = st.text_area(
-    "Message",
-    value=recall_val,
-    placeholder=f"Message {agent['short']}...",
-    label_visibility="collapsed",
-    height=70,
-    key="playground_input",
-)
+# ── Recall hint: show last user message as clickable auto-send ─────
+last_user_msg = None
+for m in reversed(st.session_state.playground_messages):
+    if m["role"] == "user":
+        last_user_msg = m["content"]
+        break
 
-col_i1, col_i2, col_i3 = st.columns([3, 1, 1])
-with col_i1:
-    st.markdown(
-        '<div style="font-size: 10px; color: rgba(255,255,255,0.2); font-family: JetBrains Mono, monospace; padding-top: 8px;">'
-        'Ctrl+Enter or click Send</div>',
-        unsafe_allow_html=True,
+recall_cols = st.columns([10, 1])
+with recall_cols[0]:
+    show_recall = (
+        last_user_msg is not None
+        and st.button(
+            f"↩ {last_user_msg[:80]}{'…' if last_user_msg and len(last_user_msg) > 80 else ''}",
+            key="recall_btn",
+            use_container_width=True,
+            help="Resend your last message",
+        )
     )
-with col_i2:
-    send = st.button("📤 Send", type="primary", use_container_width=True)
-with col_i3:
-    recall = st.button("↩︎ Recall", use_container_width=True, help="Load your last sent message")
+with recall_cols[1]:
+    if last_user_msg:
+        st.markdown(
+            '<div style="font-size: 10px; color: rgba(255,255,255,0.15); padding-top: 6px; text-align: center;">'
+            '↑ Recall</div>',
+            unsafe_allow_html=True,
+        )
 
-# ── Handle recall ───────────────────────────────────────────────────
-if recall:
-    for m in reversed(st.session_state.playground_messages):
-        if m["role"] == "user":
-            st.session_state._recall_prompt = m["content"]
-            st.rerun()
-            break
+# ── Chat input (native Enter-to-send, Shift+Enter for newline) ─────
+prompt = st.chat_input(f"Message {agent['short']}...", key="playground_chat")
+
+# ── Handle recall auto-send (triggered by recall button click) ─────
+if show_recall and last_user_msg:
+    prompt = last_user_msg
 
 # ── Handle send ─────────────────────────────────────────────────────
-if send and input_text and input_text.strip():
-    prompt = input_text.strip()
-    st.session_state._recall_prompt = ""
+if prompt and prompt.strip():
+    prompt = prompt.strip()
 
     st.session_state.playground_messages.append({
         "role": "user",
@@ -282,7 +289,8 @@ if send and input_text and input_text.strip():
         "time": datetime.now().strftime("%H:%M:%S"),
     })
 
-    system_prompt = st.session_state.get("custom_prompt", "").strip() or (
+    custom_key = f"custom_prompt_{agent_key}"
+    system_prompt = st.session_state.get(custom_key, "").strip() or (
         f"You are {agent['role']}.\n\n"
         f"Goal: {agent['goal']}\n\n"
         f"Backstory: {agent['backstory']}\n\n"

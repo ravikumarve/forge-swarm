@@ -81,9 +81,9 @@ if st.session_state.get("show_new_project"):
 
 # ── MAIN AREA ───────────────────────────────────────────────────────
 st.markdown("""
-<div style="margin-bottom: 32px;">
+<div style="margin-bottom: 24px;">
     <div class="section-tag">COGNITIVE_PIPELINE</div>
-    <h1 style="font-family: 'Space Grotesk', sans-serif; font-size: 2.5rem; font-weight: 700; margin-top: 8px;">
+    <h1 style="font-family: 'Space Grotesk', sans-serif; font-size: 2.2rem; font-weight: 700; margin-top: 8px;">
         FIVE AGENTS.<br><span style="color: #00f3ff;">ONE MISSION.</span>
     </h1>
     <p style="color: rgba(255,255,255,0.6); font-size: 1rem; line-height: 1.6; max-width: 600px;">
