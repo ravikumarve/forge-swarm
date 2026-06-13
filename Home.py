@@ -132,13 +132,14 @@ if submit and user_request.strip():
             num_ctx=config["llm"]["num_ctx"],
         )
     else:
+        nim_config = config.get("nvidia_nim", {})
         llm = LLMProvider(
             provider="nvidia_nim",
             model=model,
-            base_url="https://integrate.api.nvidia.com/v1",
-            temperature=config["nvidia_nim"].get("temperature", config["llm"]["temperature"]),
-            num_ctx=config["nvidia_nim"].get("max_tokens", 8192),
-            api_key=config["nvidia_nim"].get("api_key", ""),
+            base_url=nim_config.get("base_url", "https://integrate.api.nvidia.com/v1"),
+            temperature=nim_config.get("temperature", config["llm"]["temperature"]),
+            num_ctx=nim_config.get("max_tokens", 8192),
+            api_key=nim_config.get("api_key", ""),
         )
 
     factory = AgentFactory(llm=llm, config=config)

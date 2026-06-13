@@ -233,13 +233,24 @@ if prompt and prompt.strip():
     )
 
     try:
-        llm = LLMProvider(
-            provider=provider,
-            model=model,
-            base_url=config["llm"]["base_url"],
-            temperature=temperature,
-            num_ctx=max_tokens,
-        )
+        if provider == "nvidia_nim":
+            nim_config = config.get("nvidia_nim", {})
+            llm = LLMProvider(
+                provider="nvidia_nim",
+                model=model,
+                base_url=nim_config.get("base_url", "https://integrate.api.nvidia.com/v1"),
+                temperature=temperature,
+                num_ctx=max_tokens,
+                api_key=nim_config.get("api_key", ""),
+            )
+        else:
+            llm = LLMProvider(
+                provider=provider,
+                model=model,
+                base_url=config["llm"]["base_url"],
+                temperature=temperature,
+                num_ctx=max_tokens,
+            )
 
         with st.spinner(f"{agent['icon']} {agent['short']} is thinking..."):
             start_t = time.time()
