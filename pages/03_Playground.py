@@ -159,70 +159,126 @@ with st.expander("📝 Edit agent prompt", expanded=False):
 # ── Chat interface ──────────────────────────────────────────────────
 st.markdown("### 💬 Chat")
 st.markdown(f"""
-<div style="margin-bottom: 8px; font-size: 12px; color: rgba(255,255,255,0.4);">
+<div style="margin-bottom: 8px; font-size: 11px; color: rgba(255,255,255,0.3); font-family: 'JetBrains Mono', monospace;">
     Model: {model} · Temp: {temperature} · Max tokens: {max_tokens}
 </div>
 """, unsafe_allow_html=True)
 
-# Chat message container with fixed max height + scroll
+# ── Chat message display ────────────────────────────────────────────
 chat_container = st.container()
-
-# Display message history inside scrollable container
 with chat_container:
     if not st.session_state.playground_messages:
         st.markdown("""
-        <div style="text-align: center; padding: 40px 0; color: rgba(255,255,255,0.3);">
-            <div style="font-size: 32px; margin-bottom: 8px;">💬</div>
-            <div style="font-size: 13px;">Send a message to start chatting with the agent.</div>
+        <div style="text-align: center; padding: 48px 0; color: rgba(255,255,255,0.2);">
+            <div style="font-size: 28px; margin-bottom: 8px;">💬</div>
+            <div style="font-size: 13px;">Type a message below and press <strong>Send</strong> to start.</div>
         </div>
         """, unsafe_allow_html=True)
     else:
-        for msg in st.session_state.playground_messages:
+        for idx, msg in enumerate(st.session_state.playground_messages):
             is_user = msg["role"] == "user"
-            if is_user:
-                label_text = "🧑 You"
-                justify = "flex-end"
-                bubble_bg = "rgba(0, 243, 255, 0.08)"
-                bubble_border = "1px solid rgba(0, 243, 255, 0.2)"
-                label_color = "#00f3ff"
-            else:
-                # Use per-message agent metadata (stored from when msg was sent)
-                # with fallback to current agent for old messages
-                agent_icon = msg.get("agent_icon", agent['icon'])
-                agent_name = msg.get("agent_name", agent['short'])
-                agent_color = msg.get("agent_color", ac)
-                label_text = f"{agent_icon} {agent_name}"
-                justify = "flex-start"
-                r, g, b = int(agent_color[1:3], 16), int(agent_color[3:5], 16), int(agent_color[5:7], 16)
-                bubble_bg = f"rgba({r}, {g}, {b}, 0.08)"
-                bubble_border = f"1px solid {agent_color}30"
-                label_color = agent_color
 
-            st.markdown(f"""
-            <div style="display: flex; justify-content: {justify}; margin-bottom: 10px;">
-                <div style="background: {bubble_bg}; border: {bubble_border}; border-radius: 10px;
-                            padding: 10px 14px; max-width: 78%; min-width: 120px;">
-                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 9px;
-                                color: {label_color}; margin-bottom: 3px; letter-spacing: 0.05em;">
-                        {label_text}
-                    </div>
-                    <div style="font-size: 13px; color: #d0d0d0; line-height: 1.5; white-space: pre-wrap;
-                                font-family: 'JetBrains Mono', monospace;">
-                        {msg['content']}
-                    </div>
-                    <div style="font-size: 9px; color: rgba(255,255,255,0.2); margin-top: 4px; text-align: right;">
-                        {msg.get('time', '')}
+            if is_user:
+                # ── User message: right-aligned pill, no border ──
+                st.markdown(f"""
+                <div style="display: flex; justify-content: flex-end; margin-bottom: 12px;">
+                    <div style="background: rgba(0, 243, 255, 0.06); border-radius: 14px 14px 4px 14px;
+                                padding: 10px 16px; max-width: 78%; min-width: 80px;">
+                        <div style="font-family: 'JetBrains Mono', monospace; font-size: 9px;
+                                    color: #00f3ff; margin-bottom: 4px; letter-spacing: 0.05em;">
+                            🧑 You
+                        </div>
+                        <div style="font-size: 13px; color: #d0d0d0; line-height: 1.5; white-space: pre-wrap;
+                                    font-family: 'JetBrains Mono', monospace;">
+                            {msg['content']}
+                        </div>
+                        <div style="font-size: 9px; color: rgba(255,255,255,0.15); margin-top: 4px; text-align: right;">
+                            {msg.get('time', '')}
+                        </div>
                     </div>
                 </div>
-            </div>
-            """, unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
+            else:
+                # ── Agent message: left accent bar, glass bg, no border ──
+                a_icon = msg.get("agent_icon", agent['icon'])
+                a_name = msg.get("agent_name", agent['short'])
+                a_color = msg.get("agent_color", ac)
+                r, g, b = int(a_color[1:3], 16), int(a_color[3:5], 16), int(a_color[5:7], 16)
+                msg_id = f"msg_{idx}"
 
-# Input
-prompt = st.chat_input(f"Message {agent['short']}...")
-if prompt and prompt.strip():
+                st.markdown(f"""
+                <div style="display: flex; justify-content: flex-start; margin-bottom: 12px;">
+                    <div style="border-left: 3px solid {a_color};
+                                background: rgba({r}, {g}, {b}, 0.04);
+                                border-radius: 4px 14px 14px 4px;
+                                padding: 10px 16px; max-width: 78%; min-width: 80px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                            <span style="font-family: 'JetBrains Mono', monospace; font-size: 9px;
+                                        color: {a_color}; letter-spacing: 0.05em;">
+                                {a_icon} {a_name}
+                            </span>
+                            <span style="font-size: 9px; color: rgba(255,255,255,0.15);">
+                                {msg.get('time', '')}
+                            </span>
+                        </div>
+                        <div style="font-size: 13px; color: #d0d0d0; line-height: 1.5; white-space: pre-wrap;
+                                    font-family: 'JetBrains Mono', monospace;">
+                            {msg['content']}
+                        </div>
+                        <div style="margin-top: 4px; text-align: right;">
+                            <button onclick="navigator.clipboard.writeText(document.getElementById('{msg_id}').textContent)"
+                                    style="background: none; border: none; color: rgba(255,255,255,0.2);
+                                           font-size: 10px; cursor: pointer; padding: 0; font-family: 'JetBrains Mono', monospace;">
+                                📋 copy
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div id="{msg_id}" style="display:none;">{msg['content']}</div>
+                """, unsafe_allow_html=True)
+
+# ── Input area ──────────────────────────────────────────────────────
+st.markdown("---")
+
+# Input row: text area + send + recall
+recall_val = st.session_state.get("_recall_prompt", "")
+input_text = st.text_area(
+    "Message",
+    value=recall_val,
+    placeholder=f"Message {agent['short']}...",
+    label_visibility="collapsed",
+    height=70,
+    key="playground_input",
+)
+
+col_i1, col_i2, col_i3 = st.columns([3, 1, 1])
+with col_i1:
+    st.markdown(
+        '<div style="font-size: 10px; color: rgba(255,255,255,0.2); font-family: JetBrains Mono, monospace; padding-top: 8px;">'
+        'Ctrl+Enter or click Send</div>',
+        unsafe_allow_html=True,
+    )
+with col_i2:
+    send = st.button("📤 Send", type="primary", use_container_width=True)
+with col_i3:
+    recall = st.button("↩︎ Recall", use_container_width=True, help="Load your last sent message")
+
+# ── Handle recall ───────────────────────────────────────────────────
+if recall:
+    for m in reversed(st.session_state.playground_messages):
+        if m["role"] == "user":
+            st.session_state._recall_prompt = m["content"]
+            st.rerun()
+            break
+
+# ── Handle send ─────────────────────────────────────────────────────
+if send and input_text and input_text.strip():
+    prompt = input_text.strip()
+    st.session_state._recall_prompt = ""
+
     st.session_state.playground_messages.append({
         "role": "user",
-        "content": prompt.strip(),
+        "content": prompt,
         "time": datetime.now().strftime("%H:%M:%S"),
     })
 
@@ -257,7 +313,7 @@ if prompt and prompt.strip():
             start_t = time.time()
             response = llm.call([
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": prompt.strip()},
+                {"role": "user", "content": prompt},
             ])
             elapsed = time.time() - start_t
 
