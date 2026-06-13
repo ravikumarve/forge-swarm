@@ -1,10 +1,11 @@
 """
 Forge Swarm - Complete Production-Ready UI
-Version: 1.0
-Last updated: February 2026
+Version: 1.1
+Last updated: June 2026
 
 A 100% local, offline, privacy-first multi-agent AI platform.
 Fully refactored with proper error handling, configuration, and features.
+Startup optimized: heavy imports load lazily on first use.
 
 Requirements:
     pip install streamlit crewai crewai-tools langchain-ollama chromadb python-dotenv pyyaml
@@ -14,6 +15,8 @@ Before running:
     2. Pull models: ollama pull llama3.1:8b && ollama pull nomic-embed-text
     3. Run: streamlit run forge_swarm_with_ui.py
 """
+
+from __future__ import annotations
 
 import os
 import sys
@@ -25,7 +28,8 @@ from pathlib import Path
 from typing import Optional, Dict, List, Any
 from datetime import datetime
 
-# Disable telemetry BEFORE importing CrewAI
+
+# Disable telemetry BEFORE heavy imports
 os.environ["CREWAI_DISABLE_TELEMETRY"] = "true"
 os.environ["OTEL_SDK_DISABLED"] = "true"
 os.environ["CREWAI_TELEMETRY_ENABLED"] = "false"
@@ -33,27 +37,64 @@ os.environ["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY", "sk-dummy-ollama-only
 
 import streamlit as st
 import yaml
-from crewai import Agent, Task, Crew, Process
-from crewai.llms.base_llm import BaseLLM
-
-try:
-    from crewai_tools import SerperDevTool
-
-    SERPER_AVAILABLE = True
-except ImportError:
-    SERPER_AVAILABLE = False
-    SerperDevTool = None
-import chromadb
-from chromadb.config import Settings
 from dotenv import load_dotenv
-import ollama
-import litellm
 
 load_dotenv()
 
 
-class LLMProvider(BaseLLM):
-    """Generic LLM provider supporting Ollama and NVIDIA NIM."""
+# ---------------------------------------------------------------------------
+# Lazy import helpers — heavy libraries (crewai, chromadb, litellm, ollama)
+# are imported only when first needed, not at module load time.
+# ---------------------------------------------------------------------------
+
+@st.cache_resource
+def _crewai():
+    """Lazy-load crewai classes. Cached for the lifetime of the app."""
+    from crewai import Agent as _Agent, Task as _Task, Crew as _Crew, Process as _Process
+    return _Agent, _Task, _Crew, _Process
+
+
+def _crewai_base_llm():
+    """Lazy-load BaseLLM for LLMProvider."""
+    from crewai.llms.base_llm import BaseLLM as _BaseLLM
+    return _BaseLLM
+
+
+@st.cache_resource
+def _crewai_tools():
+    """Lazy-load crewai_tools (optional — graceful fallback)."""
+    try:
+        from crewai_tools import SerperDevTool as _SerperDevTool
+        return _SerperDevTool, True
+    except ImportError:
+        return None, False
+
+
+@st.cache_resource
+def _chromadb():
+    """Lazy-load chromadb."""
+    import chromadb as _chromadb
+    from chromadb.config import Settings as _Settings
+    return _chromadb, _Settings
+
+
+def _ollama():
+    """Lazy-load ollama client."""
+    import ollama as _ollama
+    return _ollama
+
+
+def _litellm():
+    """Lazy-load litellm."""
+    import litellm as _litellm
+    return _litellm
+
+
+class LLMProvider:
+    """Generic LLM provider supporting Ollama and NVIDIA NIM.
+
+    ⚡ Lazy-imports litellm on first call — does NOT load at module level.
+    """
 
     def __init__(
         self,
@@ -64,10 +105,12 @@ class LLMProvider(BaseLLM):
         num_ctx: int = 8192,
         api_key: str = "",
     ):
-        super().__init__(model=model, base_url=base_url, temperature=temperature)
         self.provider = provider
+        self.model = model
         self.api_key = api_key
         self._num_ctx = num_ctx
+        self.temperature = temperature
+        self._api_base = base_url
 
         if provider == "ollama":
             self._litellm_model = f"ollama/{model}"
@@ -75,21 +118,24 @@ class LLMProvider(BaseLLM):
         elif provider == "nvidia_nim":
             self._litellm_model = f"nvidia_nim/{model}"
             self._api_base = base_url or "https://integrate.api.nvidia.com/v1"
-            # Set API key for NVIDIA NIM
-            if api_key:
-                litellm.api_key = api_key
         else:
             raise ValueError(f"Unsupported LLM provider: {provider}")
 
     def call(self, messages: list[dict], **kwargs) -> str:
-        """Call the LLM via litellm."""
+        """Call the LLM via litellm (lazy-imported on first call)."""
+        _litellm_module = _litellm()
+
+        # Set API key for NVIDIA NIM
+        if self.provider == "nvidia_nim" and self.api_key:
+            _litellm_module.api_key = self.api_key
+
         # Extract CrewAI-specific kwargs
-        tools = kwargs.pop("tools", None)
-        callbacks = kwargs.pop("callbacks", None)
-        available_functions = kwargs.pop("available_functions", None)
-        from_task = kwargs.pop("from_task", None)
-        from_agent = kwargs.pop("from_agent", None)
-        response_model = kwargs.pop("response_model", None)
+        kwargs.pop("tools", None)
+        kwargs.pop("callbacks", None)
+        kwargs.pop("available_functions", None)
+        kwargs.pop("from_task", None)
+        kwargs.pop("from_agent", None)
+        kwargs.pop("response_model", None)
 
         # Build completion parameters
         completion_params = {
@@ -108,7 +154,7 @@ class LLMProvider(BaseLLM):
         # Add any remaining kwargs
         completion_params.update(kwargs)
 
-        response = litellm.completion(**completion_params)
+        response = _litellm_module.completion(**completion_params)
         return response["choices"][0]["message"]["content"]
 
     def __call__(self, messages: list[dict], **kwargs) -> str:
@@ -126,7 +172,16 @@ class OllamaEmbeddings:
     ):
         self.model = model
         self.base_url = base_url
-        self.client = ollama.Client(host=base_url)
+        # ⚡ Lazy-import ollama on first embedding call
+        self._client = None
+
+    @property
+    def client(self):
+        """Initialize ollama client lazily on first access."""
+        if self._client is None:
+            _ollama_module = _ollama()
+            self._client = _ollama_module.Client(host=self.base_url)
+        return self._client
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings for multiple texts."""
@@ -555,7 +610,7 @@ class SystemChecker:
     """Check system dependencies and health"""
 
     @staticmethod
-    @st.cache_data(ttl=5)
+    @st.cache_data(ttl=60)
     def check_ollama() -> tuple[bool, str]:
         """Check if Ollama is running"""
         try:
@@ -566,7 +621,7 @@ class SystemChecker:
         except Exception:
             return False, "Ollama is not running. Start it with: ollama serve"
     @staticmethod
-    @st.cache_data(ttl=5)
+    @st.cache_data(ttl=60)
     def get_available_models() -> List[str]:
         """Get list of available Ollama models from API, excluding embeddings."""
         try:
@@ -596,15 +651,16 @@ class SystemChecker:
         return False, "No LLM model found. Pull one with: ollama pull qwen2.5:3b"
 
     @staticmethod
-    @st.cache_data(ttl=10)
+    @st.cache_data(ttl=60)
     def check_chromadb(persist_dir: str) -> tuple[bool, str]:
         """Check if ChromaDB can be initialized at path."""
         try:
             db_path = Path(persist_dir)
             db_path.mkdir(parents=True, exist_ok=True)
 
-            test_client = chromadb.PersistentClient(
-                path=str(db_path), settings=Settings(anonymized_telemetry=False)
+            _chroma_module, _Settings = _chromadb()
+            test_client = _chroma_module.PersistentClient(
+                path=str(db_path), settings=_Settings(anonymized_telemetry=False)
             )
             test_collection = test_client.get_or_create_collection("test_check")
             test_client.delete_collection("test_check")
@@ -639,6 +695,7 @@ class SystemChecker:
         }
 
     @staticmethod
+    @st.cache_data(ttl=60)
     def check_embedding_model(model_name: str) -> tuple[bool, str]:
         """Check if the embedding model is available."""
         try:
@@ -712,13 +769,14 @@ class MemoryManager:
         self._initialize_db()
 
     def _initialize_db(self):
-        """Initialize ChromaDB"""
+        """Initialize ChromaDB (lazy-imported on first call)."""
         try:
             db_path = self.config["db_path"]
             Path(db_path).mkdir(parents=True, exist_ok=True)
 
-            self.client = chromadb.PersistentClient(
-                path=db_path, settings=Settings(anonymized_telemetry=False)
+            _chroma_module, _Settings = _chromadb()
+            self.client = _chroma_module.PersistentClient(
+                path=db_path, settings=_Settings(anonymized_telemetry=False)
             )
             self.collection = self.client.get_or_create_collection(
                 name=self.config["collection_name"]
@@ -940,9 +998,10 @@ class AgentFactory:
         self.llm = llm
         self.config = config["agents"]
 
-    def create_planner(self) -> Agent:
+    def create_planner(self) -> "Agent":
         """Create planner agent - Strategic Engineering Lead"""
-        return Agent(
+        _Agent, _, _, _ = _crewai()
+        return _Agent(
             role="Strategic Engineering Lead",
             goal="Decompose any coding request into a precise, dependency-ordered execution plan with clear acceptance criteria per subtask.",
             backstory=(
@@ -957,16 +1016,19 @@ class AgentFactory:
             allow_delegation=self.config["allow_delegation"],
         )
 
-    def create_researcher(self, enable_web_search: bool = False) -> Agent:
+    def create_researcher(self, enable_web_search: bool = False) -> "Agent":
         """Create researcher agent - Principal Technical Researcher"""
+        _Agent, _, _, _ = _crewai()
         tools = []
-        if enable_web_search and SERPER_AVAILABLE:
-            try:
-                tools.append(SerperDevTool())
-            except Exception:
-                pass
+        if enable_web_search:
+            _SerperDevTool, _available = _crewai_tools()
+            if _available:
+                try:
+                    tools.append(_SerperDevTool())
+                except Exception:
+                    pass
 
-        return Agent(
+        return _Agent(
             role="Principal Technical Researcher",
             goal="Produce a concise, high-signal research brief covering the best implementation patterns, known pitfalls, and idiomatic approaches for the task.",
             backstory=(
@@ -981,9 +1043,10 @@ class AgentFactory:
             allow_delegation=self.config["allow_delegation"],
         )
 
-    def create_coder(self) -> Agent:
+    def create_coder(self) -> "Agent":
         """Create coder agent - Senior Software Craftsperson"""
-        return Agent(
+        _Agent, _, _, _ = _crewai()
+        return _Agent(
             role="Senior Software Craftsperson",
             goal="Write complete, production-grade, immediately runnable code based on the plan and research brief. No placeholders. No TODOs without tracking. No magic numbers.",
             backstory=(
@@ -997,9 +1060,10 @@ class AgentFactory:
             allow_delegation=self.config["allow_delegation"],
         )
 
-    def create_tester(self) -> Agent:
+    def create_tester(self) -> "Agent":
         """Create tester agent - Adversarial QA Engineer"""
-        return Agent(
+        _Agent, _, _, _ = _crewai()
+        return _Agent(
             role="Adversarial QA Engineer",
             goal="Write a complete test suite that tries to break the code before production does.",
             backstory=(
@@ -1015,9 +1079,10 @@ class AgentFactory:
             allow_delegation=self.config["allow_delegation"],
         )
 
-    def create_critic(self) -> Agent:
+    def create_critic(self) -> "Agent":
         """Create critic agent - Principal Engineer & Gatekeeper"""
-        return Agent(
+        _Agent, _, _, _ = _crewai()
+        return _Agent(
             role="Principal Engineer & Gatekeeper",
             goal="Score the complete output (code + tests) on a scale of 1-10 with surgical specificity. Approve if score >= 8. Request targeted revisions if below.",
             backstory=(
@@ -1038,7 +1103,7 @@ class AgentFactory:
             allow_delegation=self.config["allow_delegation"],
         )
 
-    def create_all(self) -> Dict[str, Agent]:
+    def create_all(self) -> Dict[str, "Agent"]:
         """Create all agents, return as named dict."""
         return {
             "planner": self.create_planner(),
@@ -1395,16 +1460,17 @@ class SwarmOrchestrator:
 class TaskOrchestrator:
     """Orchestrates task creation and crew execution with retry loop."""
 
-    def __init__(self, agents: Dict[str, Agent], config: Dict[str, Any]):
+    def __init__(self, agents: Dict[str, "Agent"], config: Dict[str, Any]):
         self.agents = agents
         self.config = config
 
-    def build_tasks(self, user_request: str, context: str = "") -> List[Task]:
+    def build_tasks(self, user_request: str, context: str = "") -> "list[Any]":
         """Create ordered task list from user request."""
+        _Agent, _Task, _Crew, _Process = _crewai()
         tasks = []
 
         # Planning task
-        plan_task = Task(
+        plan_task = _Task(
             description=(
                 f"Create a detailed step-by-step plan for:\n\n{user_request}\n\n"
                 f"Context:\n{context}\n\n"
@@ -1416,7 +1482,7 @@ class TaskOrchestrator:
         tasks.append(plan_task)
 
         # Research task
-        research_task = Task(
+        research_task = _Task(
             description=(
                 f"Based on the plan, research implementation patterns.\n"
                 f"Include: recommended approach, alternatives, top 3 gotchas, one non-obvious insight."
@@ -1427,7 +1493,7 @@ class TaskOrchestrator:
         tasks.append(research_task)
 
         # Coding task
-        code_task = Task(
+        code_task = _Task(
             description=(
                 f"Write complete, production-grade code.\n"
                 f"No placeholders. No TODOs. No magic numbers. Use type hints."
@@ -1438,7 +1504,7 @@ class TaskOrchestrator:
         tasks.append(code_task)
 
         # Testing task
-        test_task = Task(
+        test_task = _Task(
             description=(
                 f"Write pytest test suite covering: happy path, sad path, evil path.\n"
                 f"Include edge cases: None, empty strings, huge numbers, unicode."
@@ -1449,7 +1515,7 @@ class TaskOrchestrator:
         tasks.append(test_task)
 
         # Critic task
-        critic_task = Task(
+        critic_task = _Task(
             description=(
                 f"Review all output and score quality 1-10.\n"
                 f"Output format MUST be:\n"
@@ -1473,6 +1539,9 @@ class TaskOrchestrator:
             Dict with keys: final_code (str), critic_result (dict),
             iterations (int), agent_log (str)
         """
+        # ⚡ Lazy-import crewai runtime classes on first pipeline execution
+        _Agent, _Task, _Crew, _Process = _crewai()
+
         quality_threshold = self.config["agents"]["quality_threshold"]
         max_iterations = self.config["agents"]["max_iterations"]
         retry = self.config["agents"]["retry_on_below_threshold"]
@@ -1486,10 +1555,10 @@ class TaskOrchestrator:
             agent_log.append(f"🔄 Iteration {iteration}/{max_iterations}")
 
             tasks = self.build_tasks(user_request, context)
-            crew = Crew(
+            crew = _Crew(
                 agents=list(self.agents.values()),
                 tasks=tasks,
-                process=Process.sequential,
+                process=_Process.sequential,
                 verbose=True,
             )
 
@@ -1731,6 +1800,18 @@ class FileUploadHandler:
 # ============================================================================
 
 
+def _get_memory_manager(config):
+    """Lazy-init MemoryManager, cached in session state."""
+    if "memory_manager" not in st.session_state:
+        try:
+            llm_manager = LLMManager(config)
+            st.session_state.memory_manager = MemoryManager(
+                config, llm_manager.embedder
+            )
+        except Exception:
+            st.session_state.memory_manager = None
+    return st.session_state.memory_manager
+
 def main() -> None:
     """Main application"""
     st.set_page_config(
@@ -1752,18 +1833,11 @@ def main() -> None:
         st.session_state.confirm_clear = False
     if "template_loaded" not in st.session_state:
         st.session_state.template_loaded = ""
-
-    # Initialize memory manager for sidebar
     if "memory_manager" not in st.session_state:
-        try:
-            llm_manager = LLMManager(config)
-            st.session_state.memory_manager = MemoryManager(
-                config, llm_manager.embedder
-            )
-        except Exception:
-            st.session_state.memory_manager = None
+        st.session_state.memory_manager = None
+    if "provider" not in st.session_state:
+        st.session_state.provider = config["llm"].get("provider", "ollama")
 
-    # ── SIDEBAR ──────────────────────────────────────────────
     # ── SIDEBAR (Command Deck) ──────────────────────────────
     with st.sidebar:
         # Compact Brand Header
@@ -1777,11 +1851,12 @@ def main() -> None:
             </div>
         </div>
         """, unsafe_allow_html=True)
-        
-        # System Status - Compact Row
-        checks = SystemChecker.run_all_checks(config)
+
+        # System Status - Compact Row (cached, no HTTP on every rerun)
+        with st.spinner(""):
+            checks = SystemChecker.run_all_checks(config)
         st.markdown("### SYS_STATUS", help="System health indicators")
-        
+
         status_html = "<div style='display: flex; gap: 8px; margin-bottom: 20px;'>"
         for name, (passed, _) in checks.items():
             icon = "●" if passed else "○"
@@ -1789,12 +1864,12 @@ def main() -> None:
             status_html += f"<span title='{name}' style='color: {color}; font-size: 14px;'>{icon}</span>"
         status_html += "</div>"
         st.markdown(status_html, unsafe_allow_html=True)
-        
+
         # Model / Provider - Compact
         st.markdown("### CONFIG", help="AI Model settings")
         llm_config = config["llm"]
         current_provider = llm_config.get("provider", "ollama")
-        
+
         # Provider toggle
         provider = st.selectbox(
             "Provider",
@@ -1802,11 +1877,12 @@ def main() -> None:
             index=0 if current_provider == "ollama" else 1,
             label_visibility="collapsed",
         )
-        
+
         if provider != current_provider:
             config["llm"]["provider"] = provider
+            st.session_state.provider = provider
             st.rerun()
-        
+
         # Model selector
         if provider == "ollama":
             available_models = SystemChecker.get_available_models()
@@ -1828,13 +1904,13 @@ def main() -> None:
             nim_models_config = config.get("nvidia_nim", {}).get("models", [])
             nim_model_options = []
             nim_model_ids = []
-            
+
             for model_data in nim_models_config:
                 model_id = model_data.get("id", "")
                 model_name = model_data.get("name", model_id)
                 nim_model_options.append(model_name)
                 nim_model_ids.append(model_id)
-            
+
             if not nim_model_options:
                 nim_model_ids = [
                     "meta/llama-3.1-8b-instruct",
@@ -1842,13 +1918,13 @@ def main() -> None:
                     "mistralai/mistral-7b-instruct-v0.3",
                 ]
                 nim_model_options = nim_model_ids
-            
+
             current_model = config["nvidia_nim"]["model"]
             try:
                 current_index = nim_model_ids.index(current_model)
             except ValueError:
                 current_index = 0
-            
+
             selected_option = st.selectbox(
                 "Model",
                 options=nim_model_options,
@@ -1857,7 +1933,7 @@ def main() -> None:
             )
             model = nim_model_ids[nim_model_options.index(selected_option)]
             config["nvidia_nim"]["model"] = model
-            
+
             # NIM API Key
             nim_config = config["nvidia_nim"]
             api_key = st.text_input(
@@ -1871,12 +1947,15 @@ def main() -> None:
                 os.environ["NIM_API_KEY"] = api_key
 
         st.markdown("---")
-        
-        # Memory - Compact Card
-        memory_manager = st.session_state.memory_manager
+
+        # Memory - Compact Card (lazy-init on first sidebar render)
+        memory_manager = _get_memory_manager(config)
         if memory_manager:
-            stats = memory_manager.get_memory_stats()
-            count = stats.get("items_stored", 0)
+            try:
+                stats = memory_manager.get_memory_stats()
+                count = stats.get("items_stored", 0)
+            except Exception:
+                count = 0
         else:
             count = 0
         

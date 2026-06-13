@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Forge Swarm | Local Multi-Agent AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;700;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        void: '#000000',
+                        forge: '#FF4B4B',
+                        chrome: '#C0C0C0',
+                    },
+                    fontFamily: {
+                        brand: ['Outfit', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #000;
+            color: #fff;
+            font-family: 'Outfit', sans-serif;
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        #canvas-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100vh;
+            z-index: -1;
+            background: radial-gradient(circle at center, #0a0a0a 0%, #000 100%);
+        }
+
+        .text-glow {
+            text-shadow: 0 0 20px rgba(255, 75, 75, 0.4);
+        }
+
+        .reveal {
+            opacity: 0;
+            transform: translateY(30px);
+            transition: all 1s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .reveal.active {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .agent-line {
+            height: 1px;
+            background: linear-gradient(90deg, transparent, #FF4B4B, transparent);
+            width: 100%;
+            transform: scaleX(0);
+            transition: transform 1.5s ease;
+        }
+
+        .agent-line.active {
+            transform: scaleX(1);
+        }
+
+        .glass-ui {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .custom-cursor {
+            width: 20px;
+            height: 20px;
+            border: 1px solid #FF4B4B;
+            border-radius: 50%;
+            position: fixed;
+            pointer-events: none;
+            z-index: 1000;
+            transition: transform 0.1s ease;
+        }
+
+        .citation {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.6rem;
+            color: #444;
+            vertical-align: super;
+            margin-left: 2px;
+        }
+    </style>
+</head>
+<body class="selection:bg-forge selection:text-white">
+
+    <div id="canvas-container"></div>
+    <div class="custom-cursor" id="cursor"></div>
+
+    <nav class="fixed w-full top-0 z-50 px-8 py-8 flex justify-between items-center pointer-events-none">
+        <div class="flex items-center gap-3 pointer-events-auto">
+            <span class="text-2xl font-black tracking-tighter text-glow">⚡ FORGE SWARM</span>
+        </div>
+        <div class="hidden md:flex gap-12 text-[10px] tracking-[0.4em] font-bold text-zinc-500 uppercase pointer-events-auto">
+            <a href="#about" class="hover:text-forge transition-colors">Origins</a>
+            <a href="#agents" class="hover:text-forge transition-colors">The Crew</a>
+            <a href="#pricing" class="hover:text-forge transition-colors">Tier Matrix</a>
+        </div>
+        <div class="pointer-events-auto">
+            <a href="https://gumroad.com/l/forgeswarm" class="px-6 py-2 bg-white text-black font-bold text-[10px] tracking-widest uppercase hover:bg-forge hover:text-white transition-all">
+                Get Swarm <span class="citation"></span>
+            </a>
+        </div>
+    </nav>
+
+    <section class="relative min-h-screen flex flex-col items-center justify-center px-6 text-center">
+        <div class="reveal">
+            <h1 class="text-[12vw] md:text-[10vw] font-black leading-[0.8] tracking-tighter mb-8">
+                LOCAL AI.<br />
+                <span class="text-forge text-glow italic">FULL CONTROL.</span>
+            </h1>
+            <p class="max-w-2xl mx-auto text-lg md:text-xl font-light text-zinc-400 leading-relaxed mb-12">
+                Five agents. One mission. <span class="citation"></span> <br/>
+                Your code, never leaving your local hardware. <span class="citation"></span>
+            </p>
+            <div class="flex justify-center gap-8 font-mono text-[10px] tracking-widest text-zinc-500 uppercase">
+                <span>// Zero Cloud</span>
+                <span>// Zero Telemetry</span>
+                <span>// Zero Compromise <span class="citation"></span></span>
+            </div>
+        </div>
+        
+        <div class="absolute bottom-10 animate-bounce text-zinc-600">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 14l-7 7-7-7" stroke-width="2"></path></svg>
+        </div>
+    </section>
+
+    <section id="agents" class="relative py-48 px-8">
+        <div class="max-w-7xl mx-auto">
+            <div class="mb-32 reveal">
+                <h2 class="text-5xl md:text-7xl font-black mb-6">THE SEQUENTIAL<br/>CREW. <span class="citation"></span></h2>
+                <p class="text-zinc-500 font-mono text-xs uppercase tracking-[0.3em]">Sequential multi-agent orchestration <span class="citation"></span></p>
+            </div>
+
+            <div class="space-y-40">
+                <div class="grid md:grid-cols-5 gap-12 relative">
+                    <div class="agent-line absolute top-1/2 left-0 z-0"></div>
+                    
+                    <div class="reveal relative z-10">
+                        <div class="w-12 h-12 bg-white text-black flex items-center justify-center font-bold mb-6">01</div>
+                        <h3 class="font-bold text-xl mb-4">Planner <span class="citation"></span></h3>
+                        <p class="text-sm text-zinc-500 leading-relaxed">System mapping and workflow architecting. <span class="citation"></span></p>
+                    </div>
+
+                    <div class="reveal relative z-10" style="transition-delay: 0.2s;">
+                        <div class="w-12 h-12 bg-zinc-800 flex items-center justify-center font-bold mb-6">02</div>
+                        <h3 class="font-bold text-xl mb-4">Researcher <span class="citation"></span></h3>
+                        <p class="text-sm text-zinc-500 leading-relaxed">Deep context gathering and documentation mining. <span class="citation"></span></p>
+                    </div>
+
+                    <div class="reveal relative z-10" style="transition-delay: 0.4s;">
+                        <div class="w-12 h-12 bg-forge flex items-center justify-center font-bold mb-6">03</div>
+                        <h3 class="font-bold text-xl mb-4">Coder <span class="citation"></span></h3>
+                        <p class="text-sm text-zinc-500 leading-relaxed">Pure implementation and logical structuring. <span class="citation"></span></p>
+                    </div>
+
+                    <div class="reveal relative z-10" style="transition-delay: 0.6s;">
+                        <div class="w-12 h-12 bg-zinc-800 flex items-center justify-center font-bold mb-6">04</div>
+                        <h3 class="font-bold text-xl mb-4">Tester <span class="citation"></span></h3>
+                        <p class="text-sm text-zinc-500 leading-relaxed">Verification and failsafe checks. <span class="citation"></span></p>
+                    </div>
+
+                    <div class="reveal relative z-10" style="transition-delay: 0.8s;">
+                        <div class="w-12 h-12 bg-white text-black flex items-center justify-center font-bold mb-6">05</div>
+                        <h3 class="font-bold text-xl mb-4">Critic <span class="citation"></span></h3>
+                        <p class="text-sm text-zinc-500 leading-relaxed">Quality threshold enforcement. Below 8/10? Agents retry. <span class="citation"></span></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="about" class="relative py-48 bg-zinc-950/50 border-y border-zinc-900">
+        <div class="max-w-7xl mx-auto px-8">
+            <div class="grid lg:grid-cols-2 gap-24 items-center">
+                <div class="reveal">
+                    <h2 class="text-5xl font-black mb-12">DEFLATE THE<br/>SUBSCRIPTION. <span class="citation"></span></h2>
+                    <div class="space-y-6">
+                        <div class="flex justify-between items-center py-4 border-b border-zinc-800 font-mono text-xs">
+                            <span class="text-zinc-500 uppercase tracking-widest">Multi-Agent Pipeline</span>
+                            <span class="text-forge">FORGE SWARM: ✅ <span class="citation"></span></span>
+                        </div>
+                        <div class="flex justify-between items-center py-4 border-b border-zinc-800 font-mono text-xs">
+                            <span class="text-zinc-500 uppercase tracking-widest">Auto-Retry Cycle</span>
+                            <span class="text-forge">FORGE SWARM: ✅ <span class="citation"></span></span>
+                        </div>
+                        <div class="flex justify-between items-center py-4 border-b border-zinc-800 font-mono text-xs">
+                            <span class="text-zinc-500 uppercase tracking-widest">100% Offline Ops</span>
+                            <span class="text-forge">FORGE SWARM: ✅ <span class="citation"></span></span>
+                        </div>
+                        <div class="flex justify-between items-center py-4 border-b border-zinc-800 font-mono text-xs">
+                            <span class="text-zinc-500 uppercase tracking-widest">One-Time Payment</span>
+                            <span class="text-forge">FORGE SWARM: ✅ <span class="citation"></span></span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="reveal glass-ui p-12 rounded-sm" style="transition-delay: 0.3s;">
+                    <div class="font-mono text-[10px] text-zinc-500 uppercase tracking-widest mb-8">Memory System Overview <span class="citation"></span></div>
+                    <h3 class="text-3xl font-bold mb-6">Persistent Vector Intelligence <span class="citation"></span></h3>
+                    <p class="text-zinc-400 mb-8 leading-relaxed">
+                        Forge Swarm uses ChromaDB to store lessons from every completed task. <span class="citation"></span> New prompts automatically retrieve relevant past context, ensuring the swarm never makes the same mistake twice. <span class="citation"></span>
+                    </p>
+                    <div class="p-4 bg-black/50 border-l-2 border-forge font-mono text-[10px] text-zinc-500">
+                        Score ≥ 7 → Stored in ChromaDB <br/>
+                        Score < 7 → Automated Retry Loop <span class="citation"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="pricing" class="relative py-48 px-8">
+        <div class="max-w-7xl mx-auto text-center reveal">
+            <h2 class="text-6xl md:text-8xl font-black mb-24">OWN YOUR<br/>HARDWARE. <span class="citation"></span></h2>
+            
+            <div class="grid md:grid-cols-3 gap-px bg-zinc-900 border border-zinc-900">
+                <div class="bg-black p-16 hover:bg-zinc-950 transition-colors">
+                    <h4 class="font-mono text-[10px] text-zinc-500 uppercase tracking-widest mb-4">Starter</h4>
+                    <div class="text-5xl font-black mb-8">$29 <span class="citation"></span></div>
+                    <ul class="text-xs text-zinc-500 space-y-4 mb-12 uppercase tracking-widest">
+                        <li>5 Agents Pipeline <span class="citation"></span></li>
+                        <li>ChromaDB Memory <span class="citation"></span></li>
+                        <li>Code Sandbox <span class="citation"></span></li>
+                    </ul>
+                </div>
+                <div class="bg-black p-16 border-x border-zinc-900 hover:bg-zinc-950 transition-colors">
+                    <h4 class="font-mono text-[10px] text-zinc-500 uppercase tracking-widest mb-4">Pro</h4>
+                    <div class="text-5xl font-black mb-8 text-forge">$49 <span class="citation"></span></div>
+                    <ul class="text-xs text-zinc-500 space-y-4 mb-12 uppercase tracking-widest">
+                        <li>Everything in Starter <span class="citation"></span></li>
+                        <li>Custom Agent Configs <span class="citation"></span></li>
+                        <li>Priority Support <span class="citation"></span></li>
+                    </ul>
+                </div>
+                <div class="bg-black p-16 hover:bg-zinc-950 transition-colors">
+                    <h4 class="font-mono text-[10px] text-zinc-500 uppercase tracking-widest mb-4">Enterprise</h4>
+                    <div class="text-5xl font-black mb-8">$99 <span class="citation"></span></div>
+                    <ul class="text-xs text-zinc-500 space-y-4 mb-12 uppercase tracking-widest">
+                        <li>Team Licensing <span class="citation"></span></li>
+                        <li>White-Label Option <span class="citation"></span></li>
+                        <li>Custom Integrations <span class="citation"></span></li>
+                    </ul>
+                </div>
+            </div>
+            
+            <p class="mt-12 text-[10px] font-mono text-zinc-600 uppercase tracking-widest">
+                All tiers include lifetime updates. No subscriptions. <span class="citation"></span>
+            </p>
+        </div>
+    </section>
+
+    <footer class="relative py-24 border-t border-zinc-900 bg-black">
+        <div class="max-w-7xl mx-auto px-8 flex flex-col md:flex-row justify-between items-center gap-12">
+            <div class="text-xl font-black tracking-tighter">⚡ FORGE SWARM <span class="citation"></span></div>
+            <div class="flex gap-8 text-[10px] font-mono text-zinc-600 uppercase tracking-widest">
+                <a href="#" class="hover:text-white transition-colors">Twitter</a>
+                <a href="#" class="hover:text-white transition-colors">Discord <span class="citation"></span></a>
+                <a href="#" class="hover:text-white transition-colors">Gumroad <span class="citation"></span></a>
+            </div>
+            <div class="text-[10px] font-mono text-zinc-800">
+                v3.0 READY · BUILT BY @RAVIKUMARVE <span class="citation"></span>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Custom Cursor
+        const cursor = document.getElementById('cursor');
+        document.addEventListener('mousemove', (e) => {
+            cursor.style.left = e.clientX + 'px';
+            cursor.style.top = e.clientY + 'px';
+        });
+
+        // Reveal Animations
+        const observerOptions = { threshold: 0.1 };
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('active');
+                    if (entry.target.nextElementSibling?.classList.contains('agent-line')) {
+                        entry.target.nextElementSibling.classList.add('active');
+                    }
+                }
+            });
+        }, observerOptions);
+
+        document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+        // Three.js Particle Swarm
+        let scene, camera, renderer, particles;
+        function initThree() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            const geometry = new THREE.BufferGeometry();
+            const vertices = [];
+            for (let i = 0; i < 2000; i++) {
+                vertices.push(THREE.MathUtils.randFloatSpread(2000));
+                vertices.push(THREE.MathUtils.randFloatSpread(2000));
+                vertices.push(THREE.MathUtils.randFloatSpread(2000));
+            }
+            geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+            const material = new THREE.PointsMaterial({ color: 0xff4b4b, size: 2, transparent: true, opacity: 0.4 });
+            particles = new THREE.Points(geometry, material);
+            scene.add(particles);
+            camera.position.z = 500;
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            particles.rotation.x += 0.0005;
+            particles.rotation.y += 0.0005;
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        initThree();
+        animate();
+    </script>
+</body>
+</html>

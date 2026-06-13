@@ -1,0 +1,63 @@
+# Forge Swarm Configuration
+# Version: 3.0
+
+llm:
+  provider: "ollama"  # Options: ollama, nvidia_nim
+  model: "qwen2.5:3b"
+  base_url: "http://localhost:11434"
+  temperature: 0.7
+  num_ctx: 8192
+  timeout: 120
+
+nvidia_nim:
+  model: "meta/llama-3.1-8b-instruct"
+  base_url: "https://integrate.api.nvidia.com/v1"
+  api_key: ""  # Set via NIM_API_KEY env var or paste here
+  temperature: 0.7
+  max_tokens: 8192
+
+embeddings:
+  provider: "ollama"  # Options: ollama
+  model: "nomic-embed-text:latest"
+  base_url: "http://localhost:11434"
+
+memory:
+  db_path: "./forge_swarm_memory"
+  collection_name: "improvement_lessons"
+  max_lessons: 200
+  min_score_to_store: 7
+  max_context_results: 5
+
+agents:
+  max_iterations: 5
+  verbose: true
+  allow_delegation: false
+  quality_threshold: 8
+  retry_on_below_threshold: true
+
+sandbox:
+  enabled: true
+  timeout_seconds: 10
+  max_output_lines: 100
+  allowed_imports:
+    - os.path
+    - json
+    - math
+    - datetime
+    - collections
+    - itertools
+    - re
+    - string
+    - typing
+
+ui:
+  page_title: "⚡ Forge Swarm"
+  page_icon: "⚡"
+  layout: "wide"
+  theme: "dark"
+  show_agent_avatars: true
+  animate_progress: true
+
+# Optional: Web Search (requires SERPER_API_KEY environment variable)
+# serper:
+#   api_key: "your-serper-api-key-here"

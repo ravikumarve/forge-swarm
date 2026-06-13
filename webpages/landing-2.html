@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FORGE SWARM | 100% Local Multi-Agent AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        void: '#000000',
+                        forgeGreen: '#00ff41',
+                        forgeCyan: '#00f3ff',
+                        forgePink: '#ff00ff',
+                    },
+                    fontFamily: {
+                        sans: ['Space Grotesk', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #000;
+            color: #fff;
+            overflow-x: hidden;
+        }
+
+        /* Lusion-inspired organic background */
+        .ambient-blob {
+            position: fixed;
+            width: 80vw;
+            height: 80vw;
+            background: radial-gradient(circle, rgba(0, 243, 255, 0.08) 0%, rgba(255, 0, 255, 0.03) 40%, transparent 70%);
+            top: -20vh;
+            left: -10vw;
+            filter: blur(80px);
+            z-index: -1;
+            animation: float 20s ease-in-out infinite alternate;
+        }
+
+        .ambient-blob-2 {
+            position: fixed;
+            width: 60vw;
+            height: 60vw;
+            background: radial-gradient(circle, rgba(0, 255, 65, 0.05) 0%, transparent 70%);
+            bottom: -10vh;
+            right: -10vw;
+            filter: blur(100px);
+            z-index: -1;
+            animation: float 25s ease-in-out infinite alternate-reverse;
+        }
+
+        @keyframes float {
+            0% { transform: translate(0, 0) scale(1); }
+            100% { transform: translate(10vw, 10vh) scale(1.1); }
+        }
+
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.02);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .text-glow {
+            text-shadow: 0 0 20px rgba(0, 243, 255, 0.4);
+        }
+
+        .section-tag {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            letter-spacing: 0.4em;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.4);
+            border-left: 2px solid #00f3ff;
+            padding-left: 12px;
+        }
+
+        .citation {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 9px;
+            color: rgba(255, 255, 255, 0.2);
+            vertical-align: super;
+            margin-left: 2px;
+        }
+
+        /* Grain texture overlay */
+        .grain {
+            position: fixed;
+            inset: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.04'/%3E%3C/svg%3E");
+            pointer-events: none;
+            z-index: 50;
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <div class="ambient-blob"></div>
+    <div class="ambient-blob-2"></div>
+    <div class="grain"></div>
+
+    <nav class="fixed w-full z-50 px-8 py-8 flex justify-between items-center mix-blend-difference">
+        <div class="flex items-center gap-4">
+            <span class="text-xl font-bold tracking-tighter uppercase">FORGE_SWARM</span>
+        </div>
+        <div class="hidden md:flex gap-12 font-mono text-[10px] tracking-widest uppercase opacity-60">
+            <a href="#about" class="hover:opacity-100 transition">Mission</a>
+            <a href="#crew" class="hover:opacity-100 transition">The Crew</a>
+            <a href="#tech" class="hover:opacity-100 transition">Stack</a>
+            <a href="#pricing" class="hover:opacity-100 transition">Tiers</a>
+        </div>
+        <div>
+            <a href="https://gumroad.com/l/forgeswarm" class="px-5 py-2 border border-white/20 text-[10px] font-mono tracking-widest uppercase hover:bg-white hover:text-black transition">Get Access <span class="citation"></span></a>
+        </div>
+    </nav>
+
+    <header class="min-h-screen flex flex-col justify-center px-8 md:px-24">
+        <div class="max-w-6xl">
+            <h1 class="text-7xl md:text-[10rem] font-bold leading-[0.85] tracking-tighter mb-12">
+                FIVE AGENTS.<br />
+                <span class="text-glow">ONE MISSION.</span> <span class="citation"></span>
+            </h1>
+            
+            <div class="grid md:grid-cols-2 gap-12 items-end">
+                <p class="text-xl md:text-2xl font-light text-white/60 leading-relaxed max-w-xl">
+                    Forge Swarm is a 100% local, privacy-first multi-agent AI platform for autonomous code generation <span class="citation"></span>. No cloud. No telemetry. No data leaks <span class="citation"></span>.
+                </p>
+                <div class="flex flex-col gap-6">
+                    <div class="font-mono text-xs text-forgeCyan">
+                        // INITIALIZING DEPLOYMENT <span class="citation"></span>
+                    </div>
+                    <div class="flex gap-4">
+                        <a href="#about" class="px-8 py-4 bg-white text-black font-bold uppercase text-xs tracking-widest hover:bg-forgeCyan transition">Explore Core</a>
+                        <a href="#pricing" class="px-8 py-4 border border-white/20 font-bold uppercase text-xs tracking-widest hover:border-white transition">Buy License</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <section id="crew" class="py-32 px-8 md:px-24">
+        <div class="section-tag mb-20">COGNITIVE_PIPELINE <span class="citation"></span></div>
+        
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div class="glass-panel p-8 rounded-sm group hover:border-forgeCyan/50 transition">
+                <div class="text-[10px] font-mono text-white/40 mb-12">01_PLANNER <span class="citation"></span></div>
+                <h3 class="text-2xl font-bold mb-4 italic">Vision</h3>
+                <p class="text-sm text-white/50 leading-relaxed">System architecture and mission mapping.</p>
+            </div>
+            <div class="glass-panel p-8 rounded-sm group hover:border-forgeCyan/50 transition">
+                <div class="text-[10px] font-mono text-white/40 mb-12">02_RESEARCHER <span class="citation"></span></div>
+                <h3 class="text-2xl font-bold mb-4 italic">Context</h3>
+                <p class="text-sm text-white/50 leading-relaxed">Deep documentation and web search analysis.</p>
+            </div>
+            <div class="glass-panel p-8 rounded-sm group hover:border-forgeCyan/50 transition border-t-2 border-t-forgeCyan">
+                <div class="text-[10px] font-mono text-white/40 mb-12">03_CODER <span class="citation"></span></div>
+                <h3 class="text-2xl font-bold mb-4 italic">Execution</h3>
+                <p class="text-sm text-white/50 leading-relaxed">Production-ready implementation entirely offline.</p>
+            </div>
+            <div class="glass-panel p-8 rounded-sm group hover:border-forgeCyan/50 transition">
+                <div class="text-[10px] font-mono text-white/40 mb-12">04_TESTER <span class="citation"></span></div>
+                <h3 class="text-2xl font-bold mb-4 italic">Validation</h3>
+                <p class="text-sm text-white/50 leading-relaxed">Unit testing and logic verification.</p>
+            </div>
+            <div class="glass-panel p-8 rounded-sm group hover:border-forgeCyan/50 transition">
+                <div class="text-[10px] font-mono text-white/40 mb-12">05_CRITIC <span class="citation"></span></div>
+                <h3 class="text-2xl font-bold mb-4 italic">Quality</h3>
+                <p class="text-sm text-white/50 leading-relaxed">Self-improvement loop scoring (8/10 threshold) <span class="citation"></span>.</p>
+            </div>
+        </div>
+    </section>
+
+    <section id="about" class="py-32 px-8 md:px-24 bg-white/5">
+        <div class="grid md:grid-cols-2 gap-24 items-center">
+            <div>
+                <div class="section-tag mb-12">CORE_MANIFESTO</div>
+                <h2 class="text-5xl font-bold mb-8 leading-tight">Your code, never leaving your machine <span class="citation"></span>.</h2>
+                <p class="text-xl text-white/60 mb-8">
+                    Unlike single-prompt generators, Forge Swarm runs a sequential crew of 5 specialized agents that challenge each other's output <span class="citation"></span>. It iterates until the Critic awards an 8/10 score <span class="citation"></span>.
+                </p>
+                <ul class="space-y-4 font-mono text-xs uppercase tracking-widest text-forgeCyan">
+                    <li>→ Persistent Vector Memory (ChromaDB) <span class="citation"></span></li>
+                    <li>→ Restricted Python Code Sandbox <span class="citation"></span></li>
+                    <li>→ Zero Config Startup <span class="citation"></span></li>
+                </ul>
+            </div>
+            
+            <div class="relative">
+                <div class="glass-panel p-1 border-white/10 rounded-sm">
+                    <div class="bg-black p-8 font-mono text-sm leading-relaxed text-white/80">
+                        <div class="text-forgeCyan mb-4">// System Architecture Log <span class="citation"></span></div>
+                        <p>> Initializing Streamlit UI... <span class="citation"></span></p>
+                        <p>> Connecting to Ollama (llama3.1:8b)... <span class="citation"></span></p>
+                        <p>> Ingesting past lessons from ChromaDB... <span class="citation"></span></p>
+                        <p class="text-forgePink">> AGENT_03 (Coder) triggered iteration 02...</p>
+                        <p class="text-forgeGreen">> CRITIC_SCORE: 8.5/10.0 [PASS] <span class="citation"></span></p>
+                    </div>
+                </div>
+                <div class="absolute -top-12 -right-12 w-64 h-64 border-r-2 border-t-2 border-white/10 pointer-events-none"></div>
+            </div>
+        </div>
+    </section>
+
+    <section class="py-32 px-8 md:px-24">
+        <div class="section-tag mb-20">MARKET_POSITIONING <span class="citation"></span></div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-left font-mono text-[10px] tracking-widest uppercase">
+                <thead class="border-b border-white/10">
+                    <tr>
+                        <th class="py-8 opacity-40">Feature</th>
+                        <th class="py-8 text-forgeCyan">Forge Swarm <span class="citation"></span></th>
+                        <th class="py-8 opacity-40">Cursor <span class="citation"></span></th>
+                        <th class="py-8 opacity-40">Windsurf <span class="citation"></span></th>
+                        <th class="py-8 opacity-40">Copilot <span class="citation"></span></th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5">
+                    <tr>
+                        <td class="py-6">Multi-Agent Pipeline <span class="citation"></span></td>
+                        <td class="py-6 text-white">5 Agents <span class="citation"></span></td>
+                        <td class="py-6 opacity-40">Single <span class="citation"></span></td>
+                        <td class="py-6 opacity-40">Single <span class="citation"></span></td>
+                        <td class="py-6 opacity-40">Single <span class="citation"></span></td>
+                    </tr>
+                    <tr>
+                        <td class="py-6">100% Local Privacy <span class="citation"></span></td>
+                        <td class="py-6 text-white">Full <span class="citation"></span></td>
+                        <td class="py-6 opacity-40">Cloud <span class="citation"></span></td>
+                        <td class="py-6 opacity-40">Cloud <span class="citation"></span></td>
+                        <td class="py-6 opacity-40">Cloud <span class="citation"></span></td>
+                    </tr>
+                    <tr>
+                        <td class="py-6">Vector Memory <span class="citation"></span></td>
+                        <td class="py-6 text-white">ChromaDB <span class="citation"></span></td>
+                        <td class="py-6 opacity-40">No <span class="citation"></span></td>
+                        <td class="py-6 opacity-40">No <span class="citation"></span></td>
+                        <td class="py-6 opacity-40">No <span class="citation"></span></td>
+                    </tr>
+                    <tr>
+                        <td class="py-6">Pricing <span class="citation"></span></td>
+                        <td class="py-6 text-white italic">One-Time <span class="citation"></span></td>
+                        <td class="py-6 opacity-40">$20/mo <span class="citation"></span></td>
+                        <td class="py-6 opacity-40">$15/mo <span class="citation"></span></td>
+                        <td class="py-6 opacity-40">$10/mo <span class="citation"></span></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section id="pricing" class="py-32 px-8 md:px-24">
+        <div class="grid md:grid-cols-3 gap-8">
+            <div class="glass-panel p-12 flex flex-col justify-between">
+                <div>
+                    <h4 class="text-sm font-mono text-white/40 mb-8 uppercase tracking-widest">01_STARTER <span class="citation"></span></h4>
+                    <div class="text-5xl font-bold mb-8 italic">$29 <span class="citation"></span></div>
+                    <ul class="space-y-4 text-sm text-white/60">
+                        <li>• Full Forge Swarm v3.0 <span class="citation"></span></li>
+                        <li>• All 5 AI Agents <span class="citation"></span></li>
+                        <li>• Vector Memory System <span class="citation"></span></li>
+                    </ul>
+                </div>
+                <a href="https://gumroad.com/l/forgeswarm" class="mt-12 py-4 border border-white text-center font-bold uppercase text-xs tracking-widest hover:bg-white hover:text-black transition">Deploy Now</a>
+            </div>
+            <div class="glass-panel p-12 border-t-4 border-t-forgeCyan flex flex-col justify-between">
+                <div>
+                    <h4 class="text-sm font-mono text-forgeCyan mb-8 uppercase tracking-widest">02_PRO <span class="citation"></span></h4>
+                    <div class="text-5xl font-bold mb-8 italic">$49 <span class="citation"></span></div>
+                    <ul class="space-y-4 text-sm text-white/60">
+                        <li>• Everything in Starter <span class="citation"></span></li>
+                        <li>• Custom Agent Configs <span class="citation"></span></li>
+                        <li>• Advanced Templates <span class="citation"></span></li>
+                        <li>• Priority Support <span class="citation"></span></li>
+                    </ul>
+                </div>
+                <a href="https://gumroad.com/l/forgeswarm" class="mt-12 py-4 bg-white text-black text-center font-bold uppercase text-xs tracking-widest hover:bg-forgeCyan transition">Deploy Now</a>
+            </div>
+            <div class="glass-panel p-12 flex flex-col justify-between">
+                <div>
+                    <h4 class="text-sm font-mono text-white/40 mb-8 uppercase tracking-widest">03_ENTERPRISE <span class="citation"></span></h4>
+                    <div class="text-5xl font-bold mb-8 italic">$99 <span class="citation"></span></div>
+                    <ul class="space-y-4 text-sm text-white/60">
+                        <li>• Team License <span class="citation"></span></li>
+                        <li>• White-Label Option <span class="citation"></span></li>
+                        <li>• Custom Integrations <span class="citation"></span></li>
+                    </ul>
+                </div>
+                <a href="https://gumroad.com/l/forgeswarm" class="mt-12 py-4 border border-white text-center font-bold uppercase text-xs tracking-widest hover:bg-white hover:text-black transition">Contact Sales</a>
+            </div>
+        </div>
+        <div class="mt-20 text-center font-mono text-[10px] opacity-40 uppercase tracking-widest">
+            All tiers include lifetime updates. 30-day money-back guarantee. <span class="citation"></span>
+        </div>
+    </section>
+
+    <footer class="py-20 px-8 border-t border-white/5">
+        <div class="flex flex-col md:flex-row justify-between items-center gap-12">
+            <div class="text-lg font-bold tracking-tighter uppercase">FORGE_SWARM</div>
+            <div class="flex gap-12 font-mono text-[10px] tracking-widest uppercase opacity-40">
+                <a href="https://discord.gg/forgeswarm">Discord <span class="citation"></span></a>
+                <a href="https://github.com/ravikumarve/forge-swarm">GitHub <span class="citation"></span></a>
+                <a href="mailto:support@forgeswarm.com">Support <span class="citation"></span></a>
+            </div>
+            <div class="font-mono text-[10px] opacity-20">
+                © 2026 FORGE SWARM V3.0 <span class="citation"></span>
+            </div>
+        </div>
+    </footer>
+
+</body>
+</html>

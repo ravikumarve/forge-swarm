@@ -2,14 +2,84 @@
 # Version: 3.0
 
 llm:
-  model: "llama3.1:8b"
+  provider: "ollama"  # Options: ollama, nvidia_nim
+  model: "phi3:mini"
   base_url: "http://localhost:11434"
   temperature: 0.7
   num_ctx: 8192
   timeout: 120
 
+nvidia_nim:
+  model: "meta/llama-3.1-8b-instruct"
+  base_url: "https://integrate.api.nvidia.com/v1"
+  api_key: ""  # Set via NIM_API_KEY env var or paste here
+  temperature: 0.7
+  max_tokens: 8192
+  models:
+    - id: "kimi-k2.6"
+      name: "Kimi K2.6"
+      description: "1T multimodal MoE for long-horizon coding, agentic tool use"
+      context: "256K"
+      parameters: "1T"
+      specialty: "multimodal"
+    - id: "mistral-medium-3.5-128b"
+      name: "Mistral Medium 3.5 128B"
+      description: "High performing model for text generation, coding and agentic use cases"
+      context: "128K"
+      parameters: "128B"
+      specialty: "coding"
+    - id: "deepseek-v4-flash"
+      name: "DeepSeek V4 Flash"
+      description: "284B MoE model with 1M-token context optimized for fast coding and agents"
+      context: "1M"
+      parameters: "284B"
+      specialty: "fast_coding"
+    - id: "deepseek-v4-pro"
+      name: "DeepSeek V4 Pro"
+      description: "Scales to 1M-token context windows with efficient MoE architecture for coding tasks"
+      context: "1M"
+      parameters: "284B"
+      specialty: "coding"
+    - id: "glm-5.1"
+      name: "GLM 5.1"
+      description: "Flagship LLM for agentic workflows, coding, and long-horizon reasoning tasks"
+      context: "128K"
+      parameters: "230B"
+      specialty: "agentic"
+    - id: "glm-4.7"
+      name: "GLM 4.7"
+      description: "Multilingual agentic coding partner with stronger reasoning, tool use, and UI skills"
+      context: "128K"
+      parameters: "230B"
+      specialty: "coding"
+    - id: "minimax-m2.7"
+      name: "MiniMax M2.7"
+      description: "230B-parameter text-to-text AI model excelling in coding, reasoning, and office tasks"
+      context: "200K"
+      parameters: "230B"
+      specialty: "coding"
+    - id: "gemma-4-31b-it"
+      name: "Gemma 4 31B IT"
+      description: "Dense 31B model delivering frontier reasoning for coding, agentic workflows"
+      context: "128K"
+      parameters: "31B"
+      specialty: "reasoning"
+    - id: "mistral-small-4-119b-2603"
+      name: "Mistral Small 4 119B"
+      description: "Hybrid MoE model unifying instruct, reasoning, and coding with multimodal input"
+      context: "256K"
+      parameters: "119B"
+      specialty: "multimodal"
+    - id: "nemotron-3-super-120b-a12b"
+      name: "Nemotron 3 Super 120B"
+      description: "Open, efficient hybrid Mamba-Transformer MoE with 1M context, excelling in agentic reasoning, coding, planning"
+      context: "1M"
+      parameters: "120B"
+      specialty: "agentic"
+
 embeddings:
-  model: "nomic-embed-text"
+  provider: "ollama"  # Options: ollama
+  model: "nomic-embed-text:latest"
   base_url: "http://localhost:11434"
 
 memory:
