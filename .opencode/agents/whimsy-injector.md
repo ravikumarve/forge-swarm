@@ -269,13 +269,21 @@ class WhimsyAchievements {
     // Create celebration overlay
     const celebration = document.createElement('div');
     celebration.className = `achievement-celebration ${achievement.celebration}`;
-    celebration.innerHTML = `
-      <div class="achievement-card">
-        <div class="achievement-icon">${achievement.icon}</div>
-        <h3>${achievement.title}</h3>
-        <p>${achievement.description}</p>
-      </div>
-    `;
+    // SAFE: Use textContent + createElement to prevent XSS
+    // Never use innerHTML with interpolated user content
+    const card = document.createElement('div');
+    card.className = 'achievement-card';
+    const iconDiv = document.createElement('div');
+    iconDiv.className = 'achievement-icon';
+    iconDiv.textContent = achievement.icon;
+    const titleEl = document.createElement('h3');
+    titleEl.textContent = achievement.title;
+    const descEl = document.createElement('p');
+    descEl.textContent = achievement.description;
+    card.appendChild(iconDiv);
+    card.appendChild(titleEl);
+    card.appendChild(descEl);
+    celebration.appendChild(card);
     
     document.body.appendChild(celebration);
     

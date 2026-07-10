@@ -20,7 +20,7 @@ import streamlit as st
 
 from forge_swarm_core import (
     Config, DARK_THEME_CSS, LLMProvider, SystemChecker,
-    render_sidebar,
+    render_sidebar, MCPToolManager,
 )
 
 st.set_page_config(page_title="Playground - Forge Swarm", page_icon="🧪", layout="wide")
@@ -99,6 +99,33 @@ with st.sidebar:
     max_tokens = st.slider(
         "Max tokens", min_value=128, max_value=8192, value=2048, step=128,
     )
+
+    # ── Tool controls (per-agent) ─────────────────────────────────
+    st.markdown("---")
+    st.markdown("### 🛠️ TOOLS")
+    agent_key_sidebar = st.session_state.playground_agent
+    if "mcp_manager" not in st.session_state:
+        st.session_state.mcp_manager = MCPToolManager(config)
+    mcp_mgr = st.session_state.mcp_manager
+    avail_tools = mcp_mgr.list_tools()
+    # Per-agent enabled tool set
+    et_key = f"enabled_tools_{agent_key_sidebar}"
+    if et_key not in st.session_state:
+        st.session_state[et_key] = []
+    if avail_tools:
+        selected = []
+        for t in avail_tools:
+            on = st.checkbox(
+                f" {t['name']}",
+                value=t["name"] in st.session_state[et_key],
+                key=f"t_{agent_key_sidebar}_{t['name']}",
+                help=t.get("description", ""),
+            )
+            if on:
+                selected.append(t["name"])
+        st.session_state[et_key] = selected
+    else:
+        st.caption("No tools available")
 
     if st.button("🗑️ Clear conversation", use_container_width=True):
         st.session_state.playground_messages = []
@@ -279,7 +306,7 @@ prompt = st.chat_input(f"Message {agent['short']}...", key="playground_chat")
 if show_recall and last_user_msg:
     prompt = last_user_msg
 
-# ── Handle send ─────────────────────────────────────────────────────
+# ── Handle send with optional tool support ─────────────────────────
 if prompt and prompt.strip():
     prompt = prompt.strip()
 
@@ -296,6 +323,16 @@ if prompt and prompt.strip():
         f"Backstory: {agent['backstory']}\n\n"
         f"Respond as this agent. Be concise, direct, and true to your role."
     )
+
+    # ── Append tool descriptions if tools are enabled for this agent ──
+    et_key = f"enabled_tools_{agent_key}"
+    enabled_tool_names = st.session_state.get(et_key, [])
+    mcp_mgr = st.session_state.get("mcp_manager")
+    if enabled_tool_names and mcp_mgr:
+        system_prompt += mcp_mgr.format_tools_for_prompt(enabled_tool_names)
+        tool_used = True
+    else:
+        tool_used = False
 
     try:
         if provider == "nvidia_nim":
@@ -317,17 +354,51 @@ if prompt and prompt.strip():
                 num_ctx=max_tokens,
             )
 
-        with st.spinner(f"{agent['icon']} {agent['short']} is thinking..."):
-            start_t = time.time()
-            response = llm.call([
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": prompt},
-            ])
-            elapsed = time.time() - start_t
+        # ── Multi-round tool loop ─────────────────────────────────────
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": prompt},
+        ]
+        max_tool_rounds = 3 if tool_used else 1
+        final_response = ""
+        elapsed = 0.0
+
+        for round_i in range(max_tool_rounds):
+            with st.spinner(f"{agent['icon']} {agent['short']} is thinking{' (tool round ' + str(round_i + 1) + ')' if round_i > 0 else ''}..."):
+                start_t = time.time()
+                raw = llm.call(messages)
+                round_elapsed = time.time() - start_t
+                elapsed += round_elapsed
+
+            # Check for tool call
+            tool_call = mcp_mgr.parse_tool_call(raw) if tool_used else None
+            if tool_call and tool_call["name"] in enabled_tool_names:
+                messages.append({"role": "assistant", "content": raw})
+                with st.spinner(f"🔧 Running {tool_call['name']}..."):
+                    tool_result = mcp_mgr.call_tool(tool_call["name"], tool_call["args"])
+                messages.append({
+                    "role": "user",
+                    "content": f"Tool '{tool_call['name']}' returned:\n{tool_result}\n\n"
+                               f"Please provide your final response based on this result.",
+                })
+                # Don't set final_response yet — wait for the next round
+            else:
+                # Clean the raw output: remove any stray TOOL_CALL markers
+                import re
+                final_response = re.sub(
+                    r'<<<TOOL_CALL>>>.*?<<<END_TOOL_CALL>>>',
+                    '', raw, flags=re.DOTALL,
+                ).strip()
+                if not final_response:
+                    final_response = raw
+                break
+
+        if not final_response:
+            final_response = raw if 'raw' in locals() else "(no response)"
 
         st.session_state.playground_messages.append({
             "role": "assistant",
-            "content": response,
+            "content": final_response,
             "time": f"{elapsed:.1f}s",
             "agent_icon": agent['icon'],
             "agent_name": agent['short'],

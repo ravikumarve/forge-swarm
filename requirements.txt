@@ -17,3 +17,6 @@ litellm>=1.0.0
 # Code sandbox
 pygments>=2.17.0
 RestrictedPython>=7.0
+
+# MCP tool integration (optional — for external MCP server connections)
+mcp>=1.0.0

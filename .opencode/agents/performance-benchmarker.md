@@ -89,7 +89,7 @@ export default function () {
   // Test critical user journey
   const loginResponse = http.post(`${baseUrl}/api/auth/login`, {
     email: 'test@example.com',
-    password: 'password123'
+    password: __ENV.TEST_PASSWORD || 'test_password_placeholder'
   });
   
   check(loginResponse, {

@@ -111,6 +111,23 @@ sandbox:
   enabled: true
   max_output_lines: 100
   timeout_seconds: 10
+mcp:
+  enabled: true
+  builtin_tools:
+    web_search: true
+    file_read: true
+    execute_python: true
+  servers: []
+  # Example MCP server configs (requires `pip install mcp`):
+  # servers:
+  #   - name: filesystem
+  #     transport: stdio
+  #     command: npx
+  #     args: ["-y", "@anthropic/mcp-server-filesystem", "/path/to/allowed"]
+  #   - name: fetch
+  #     transport: stdio
+  #     command: npx
+  #     args: ["-y", "@anthropic/mcp-server-fetch"]
 ui:
   animate_progress: true
   layout: wide

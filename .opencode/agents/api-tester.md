@@ -73,7 +73,7 @@ describe('User API Comprehensive Testing', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         email: 'test@example.com',
-        password: 'secure_password'
+        password: process.env.TEST_PASSWORD || 'test_password_placeholder'
       })
     });
     const data = await response.json();

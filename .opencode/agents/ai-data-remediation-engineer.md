@@ -153,7 +153,11 @@ def apply_fix_to_cluster(df: pd.DataFrame, column: str, fix: dict) -> pd.DataFra
         df['quarantine_reason'] = f"Low confidence: {fix['confidence_score']}"
         return df
 
-    transform_fn = eval(fix['transformation'])  # safe — evaluated only after strict validation gate (lambda-only, no imports/exec/os)
+    # WARNING: eval() with dynamic input is dangerous.
+    # This is SAFE ONLY because `fix['transformation']` comes from the strict
+    # validation gate above which enforces: lambda-only, no imports/exec/os/builtins.
+    # For production, prefer a function registry pattern instead.
+    transform_fn = eval(fix['transformation'])  # validated above — lambda-only scope
     df[column] = df[column].map(transform_fn)
     df['validation_status'] = 'AI_FIXED'
     df['ai_reasoning'] = fix['reasoning']

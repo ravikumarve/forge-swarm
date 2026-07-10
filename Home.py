@@ -24,7 +24,8 @@ from forge_swarm_core import (
     # Core
     Config, LLMProvider, LLMManager, MemoryManager,
     SystemChecker, AgentFactory, TaskOrchestrator, CriticParser,
-    CodeSandbox, FileUploadHandler, AgentStatusDisplay,
+    CodeSandbox, FileUploadHandler,
+    AgentStatusDisplay, VisualPipelineGraph,
     OllamaEmbeddings,
     # UI helpers
     DARK_THEME_CSS, setup_wizard, get_memory_manager,
@@ -92,7 +93,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-AgentStatusDisplay.render_pipeline(current_agent_idx=-1)
+VisualPipelineGraph.render_pipeline(current_agent_idx=-1)
 st.markdown("---")
 
 # Task input
