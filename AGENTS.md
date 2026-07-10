@@ -6,6 +6,34 @@
 
 ## 💾 Session Memory Ledger (For context7 MCP)
 
+### [2026-07-10 18:50] - Monolith Split + CodeSandbox Subprocess Refactor
+- **State**: Success
+- **MCP Data Used**: code_tree (AST structural analysis)
+- **Agents Deployed**: @orchestrator (direct execution)
+- **Architectural Decision**:
+  - Split 2,719-line forge_swarm_core.py (111 fns, 19 classes) into 10 domain modules under forge_swarm_core/ package
+  - Modules: _lazy, core, llm, memory, agents, orchestrator, sandbox, mcp_tools, ui
+  - Backward-compatible __init__.py re-exports all 18 public symbols
+  - All 5 pages (Home.py + 4 subpages) continue to import from `forge_swarm_core` unchanged
+  - Replaced exec() with subprocess.run() in CodeSandbox — zero security scanner flags
+- **Verification**: All 10 modules + 5 page files compile clean
+- **Next Turn Directive**: Consider running the app via `streamlit run Home.py` to verify runtime
+
+### [2026-07-10 18:35] - CodeFlow Security Fixes & Push
+- **State**: Success
+- **MCP Data Used**: code_tree (AST analysis from codeflow-analysis.json)
+- **Agents Deployed**: @orchestrator (direct execution)
+- **Architectural Decision**:
+  - Fixed 3 hardcoded credentials in agent .md files (env var pattern)
+  - Rewrote WhimsyInjector innerHTML → createElement + textContent (XSS fix)
+  - Hardened CodeSandbox.exec(): stripped __builtins__, added SIGALRM timeout
+  - Documented eval() security boundary in ai-data-remediation-engineer.md
+  - Removed dead _crewai_base_llm() function
+  - Restored README.md (was accidentally deleted in working tree)
+- **Verification**: All 7 .py files compile and parse clean (AST verified)
+- **Commit**: `5892b84` pushed to origin/main
+- **Next Turn Directive**: Consider splitting forge_swarm_core.py (2,688 lines, 91 fns) into domain modules
+
 ### [2026-06-13 16:00] - Agent Prompt Scoping + Chat Input + Theme Consistency
 - **State**: Success
 - **MCP Data Used**: None (local file reads only)
